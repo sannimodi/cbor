@@ -29,7 +29,7 @@ public partial class Person
                     age = reader.ReadInt32();
                     break;
                 default:
-                    reader.SkipDataItem();
+                    reader.SkipValue();
                     break;
             }
         }

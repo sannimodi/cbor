@@ -10,6 +10,8 @@ This project is an experiment to create a CBOR library with AOT support, similar
 
 The sample project demonstrates how to serialize and deserialize data using
 `System.Formats.Cbor`.
+It includes a minimal example of code generation for CBOR where the serializer
+methods are generated at compile time for use in AOT scenarios.
 
 Build and run the console sample:
 

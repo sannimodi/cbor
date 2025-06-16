@@ -1,6 +1,3 @@
-using System;
-using System.Formats.Cbor;
-
 class Program
 {
     static void Main()

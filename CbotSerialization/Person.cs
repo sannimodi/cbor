@@ -1,5 +1,3 @@
-using System;
-
 /// <summary>
 /// Represents a person with a name and age.
 /// </summary>

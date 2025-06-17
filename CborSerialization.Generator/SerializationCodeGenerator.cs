@@ -5,50 +5,59 @@ namespace CborSerialization.Generator;
 
 internal static class SerializationCodeGenerator
 {
-    public static string GenerateSerializationCode(INamedTypeSymbol typeSymbol)
+    public static string GenerateSerializationCode(INamedTypeSymbol typeSymbol, string contextRef = "this")
     {
         var builder = new StringBuilder();
+        if (IsList(typeSymbol, out var elementType))
+        {
+            builder.AppendLine("writer.WriteStartArray(value.Count);");
+            builder.AppendLine($"foreach (var item in value)");
+            builder.AppendLine("{");
+            builder.AppendLine($"    // Use the parent context's type info for the element type");
+            builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(elementType)}.Serialize(writer, item);");
+            builder.AppendLine("}");
+            builder.AppendLine("writer.WriteEndArray();");
+            return builder.ToString();
+        }
         var properties = GetSerializableProperties(typeSymbol);
-
-        // Start map
         builder.AppendLine("writer.WriteStartMap(null);");
-
         foreach (var property in properties)
         {
             var propertyName = GetPropertyName(property);
             var propertyType = property.Type;
-
-            // Write property name
             builder.AppendLine($"writer.WriteTextString(\"{propertyName}\");");
-
-            // Write property value based on type
             builder.AppendLine(GeneratePropertySerialization(property));
         }
-
-        // End map
         builder.AppendLine("writer.WriteEndMap();");
-
         return builder.ToString();
     }
 
-    public static string GenerateDeserializationCode(INamedTypeSymbol typeSymbol)
+    public static string GenerateDeserializationCode(INamedTypeSymbol typeSymbol, string contextRef = "this")
     {
         var builder = new StringBuilder();
+        if (IsList(typeSymbol, out var elementType))
+        {
+            builder.AppendLine($"var list = new System.Collections.Generic.List<{elementType.ToDisplayString()}>();");
+            builder.AppendLine("int? length = reader.ReadStartArray();");
+            builder.AppendLine("for (int i = 0; length == null || i < length; i++)");
+            builder.AppendLine("{");
+            builder.AppendLine($"    // Use the parent context's type info for the element type");
+            builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(elementType)}.Deserialize(reader);");
+            builder.AppendLine("    list.Add(item);");
+            builder.AppendLine("    if (length == null && reader.PeekState() == CborReaderState.EndArray) break;");
+            builder.AppendLine("}");
+            builder.AppendLine("reader.ReadEndArray();");
+            builder.AppendLine("return list;");
+            return builder.ToString();
+        }
         var properties = GetSerializableProperties(typeSymbol);
-
-        // Create instance
         builder.AppendLine($"var result = new {typeSymbol.ToDisplayString()}();");
-
-        // Read map
         builder.AppendLine("reader.ReadStartMap();");
-
-        // Read properties
         builder.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
         builder.AppendLine("{");
         builder.AppendLine("    var propertyName = reader.ReadTextString();");
         builder.AppendLine("    switch (propertyName)");
         builder.AppendLine("    {");
-
         foreach (var property in properties)
         {
             var propertyName = GetPropertyName(property);
@@ -56,16 +65,13 @@ internal static class SerializationCodeGenerator
             builder.AppendLine($"            result.{property.Name} = {GeneratePropertyDeserialization(property)};");
             builder.AppendLine("            break;");
         }
-
         builder.AppendLine("        default:");
         builder.AppendLine("            reader.SkipValue();");
         builder.AppendLine("            break;");
         builder.AppendLine("    }");
         builder.AppendLine("}");
-
         builder.AppendLine("reader.ReadEndMap();");
         builder.AppendLine("return result;");
-
         return builder.ToString();
     }
 
@@ -136,5 +142,30 @@ internal static class SerializationCodeGenerator
             SpecialType.System_UInt16 => "(ushort)reader.ReadUInt32()",
             _ => $"// TODO: Implement deserialization for {type.ToDisplayString()}"
         };
+    }
+
+    private static bool IsList(INamedTypeSymbol typeSymbol, out ITypeSymbol? elementType)
+    {
+        elementType = null;
+        if (typeSymbol is { IsGenericType: true } && typeSymbol.Name == "List" && typeSymbol.TypeArguments.Length == 1)
+        {
+            elementType = typeSymbol.TypeArguments[0];
+            return true;
+        }
+        return false;
+    }
+
+    private static string GetPropertyNameFromType(ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType)
+        {
+            var name = namedType.Name;
+            int backtickIndex = name.IndexOf('`');
+            if (backtickIndex >= 0)
+                name = name.Substring(0, backtickIndex);
+            name += "Of" + string.Join("And", namedType.TypeArguments.Select(t => GetPropertyNameFromType(t)));
+            return name;
+        }
+        return typeSymbol.Name;
     }
 } 

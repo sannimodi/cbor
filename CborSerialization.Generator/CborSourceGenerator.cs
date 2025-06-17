@@ -139,10 +139,25 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
             if (typeArg.Value is not INamedTypeSymbol typeSymbol)
                 continue;
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var propertyName = GetPropertyName(typeSymbol);
-            builder.AppendLine($"    public CborTypeInfo<{typeName}> {propertyName} {{ get; }} = new {propertyName}TypeInfo();");
+            var propertyName = GetPropertyNameFromType(typeSymbol);
+            builder.AppendLine($"    public CborTypeInfo<{typeName}> {propertyName} {{ get; }}");
         }
-        builder.AppendLine();
+
+        // Add constructor to initialize type info properties with 'this'
+        builder.AppendLine($"    public {contextType.Name}()");
+        builder.AppendLine("    {");
+        foreach (var attr in serializableAttributes)
+        {
+            if (attr.ConstructorArguments.Length == 0)
+                continue;
+            var typeArg = attr.ConstructorArguments[0];
+            if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+                continue;
+            var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var propertyName = GetPropertyNameFromType(typeSymbol);
+            builder.AppendLine($"        {propertyName} = new {propertyName}TypeInfo(this);");
+        }
+        builder.AppendLine("    }");
 
         // Add type info implementations for each serializable type
         foreach (var attr in serializableAttributes)
@@ -153,18 +168,19 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
             if (typeArg.Value is not INamedTypeSymbol typeSymbol)
                 continue;
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var propertyName = GetPropertyName(typeSymbol);
-
+            var propertyName = GetPropertyNameFromType(typeSymbol);
             builder.AppendLine($"    private sealed class {propertyName}TypeInfo : CborTypeInfo<{typeName}>");
             builder.AppendLine("    {");
+            builder.AppendLine($"        private readonly {contextType.Name} _context;");
+            builder.AppendLine($"        public {propertyName}TypeInfo({contextType.Name} context) => _context = context;");
             builder.AppendLine($"        public override void Serialize(CborWriter writer, {typeName} value)");
             builder.AppendLine("        {");
-            builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol));
+            builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol, "_context"));
             builder.AppendLine("        }");
             builder.AppendLine();
             builder.AppendLine($"        public override {typeName} Deserialize(CborReader reader)");
             builder.AppendLine("        {");
-            builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol));
+            builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol, "_context"));
             builder.AppendLine("        }");
             builder.AppendLine("    }");
             builder.AppendLine();
@@ -180,11 +196,40 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
     private static string GetPropertyName(INamedTypeSymbol typeSymbol)
     {
         var name = typeSymbol.Name;
+        int backtickIndex = name.IndexOf('`');
         if (typeSymbol.IsGenericType)
         {
-            name = name.Substring(0, name.IndexOf('`'));
-            name += string.Join("", typeSymbol.TypeArguments.Select(t => t.Name));
+            if (backtickIndex >= 0)
+                name = name.Substring(0, backtickIndex);
+            // Use 'Of' to join type arguments for uniqueness and readability
+            name += "Of" + string.Join("And", typeSymbol.TypeArguments.Select(t => GetPropertyNameFromType(t)));
+        }
+        else if (backtickIndex >= 0)
+        {
+            name = name.Substring(0, backtickIndex);
         }
         return name;
+    }
+
+    private static string GetPropertyNameFromType(ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType)
+        {
+            var name = namedType.Name;
+            int backtickIndex = name.IndexOf('`');
+            if (backtickIndex >= 0)
+                name = name.Substring(0, backtickIndex);
+            name += "Of" + string.Join("And", namedType.TypeArguments.Select(t => GetPropertyNameFromType(t)));
+            return name;
+        }
+        else if (typeSymbol is INamedTypeSymbol namedType2)
+        {
+            var name = namedType2.Name;
+            int backtickIndex = name.IndexOf('`');
+            if (backtickIndex >= 0)
+                name = name.Substring(0, backtickIndex);
+            return name;
+        }
+        return typeSymbol.Name;
     }
 }

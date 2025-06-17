@@ -14,6 +14,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Context", "Context", "{6EEA4A9F-0FD7-C472-85FE-E9865E8415B8}"
 	ProjectSection(SolutionItems) = preProject
 		cbor_spec_enhanced.md = cbor_spec_enhanced.md
+		README.md = README.md
+		release.md = release.md
 	EndProjectSection
 EndProject
 Global

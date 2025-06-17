@@ -14,4 +14,8 @@
 		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" PrivateAssets="all" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<ProjectReference Include="..\CborSerialization\CborSerialization.csproj" />
+	</ItemGroup>
+
 </Project>

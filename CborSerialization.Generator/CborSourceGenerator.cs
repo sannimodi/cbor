@@ -15,7 +15,16 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
         // Register for syntax notifications
         var syntaxProvider = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: (node, _) => node is ClassDeclarationSyntax c && c.AttributeLists.Count > 0,
+                predicate: (node, _) => 
+                {
+                    if (node is not ClassDeclarationSyntax classDecl)
+                        return false;
+
+                    // Check if the class has any attributes
+                    return classDecl.AttributeLists
+                        .SelectMany(al => al.Attributes)
+                        .Any(attr => attr.Name.ToString().Contains("CborSerializable"));
+                },
                 transform: (context, _) => context.Node as ClassDeclarationSyntax)
             .Where(node => node != null);
 
@@ -28,10 +37,33 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
 
     private void GenerateSource(SourceProductionContext context, Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes)
     {
+        // Add diagnostic output
+        context.ReportDiagnostic(Diagnostic.Create(
+            new DiagnosticDescriptor(
+                "SG0001",
+                "Source Generator Debug",
+                "Processing {0} classes",
+                "Debug",
+                DiagnosticSeverity.Info,
+                isEnabledByDefault: true),
+            Location.None,
+            classes.Length));
+
         // Get the CborSerializable attribute symbol
         var cborSerializableAttributeSymbol = compilation.GetTypeByMetadataName("CborSerialization.CborSerializableAttribute");
         if (cborSerializableAttributeSymbol == null)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                new DiagnosticDescriptor(
+                    "SG0002",
+                    "Source Generator Error",
+                    "Could not find CborSerializableAttribute",
+                    "Error",
+                    DiagnosticSeverity.Error,
+                    isEnabledByDefault: true),
+                Location.None));
             return;
+        }
 
         // Process each context class
         foreach (var contextClass in classes)
@@ -41,6 +73,18 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
             if (typeSymbol == null)
                 continue;
 
+            // Add diagnostic output for each class
+            context.ReportDiagnostic(Diagnostic.Create(
+                new DiagnosticDescriptor(
+                    "SG0003",
+                    "Source Generator Debug",
+                    "Processing class: {0}",
+                    "Debug",
+                    DiagnosticSeverity.Info,
+                    isEnabledByDefault: true),
+                Location.None,
+                typeSymbol.Name));
+
             // Get the CborSerializable attributes
             var serializableAttributes = typeSymbol.GetAttributes()
                 .Where(attr => attr.AttributeClass?.Equals(cborSerializableAttributeSymbol, SymbolEqualityComparer.Default) == true)
@@ -48,6 +92,19 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
 
             if (!serializableAttributes.Any())
                 continue;
+
+            // Add diagnostic output for attributes
+            context.ReportDiagnostic(Diagnostic.Create(
+                new DiagnosticDescriptor(
+                    "SG0004",
+                    "Source Generator Debug",
+                    "Found {0} CborSerializable attributes on {1}",
+                    "Debug",
+                    DiagnosticSeverity.Info,
+                    isEnabledByDefault: true),
+                Location.None,
+                serializableAttributes.Count,
+                typeSymbol.Name));
 
             // Generate the source code
             var source = GenerateContextSource(typeSymbol, serializableAttributes);
@@ -117,8 +174,12 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
             var typeName = typeSymbol.ToDisplayString();
             var propertyName = GetPropertyName(typeSymbol);
 
-            // Add type info property
-            builder.AppendLine($"    public CborTypeInfo<{typeName}> {propertyName} {{ get; }}");
+            // Add type info property with initialization
+            builder.AppendLine($"    public CborTypeInfo<{typeName}> {propertyName} {{ get; }} = new CborTypeInfo<{typeName}>");
+            builder.AppendLine("    {");
+            builder.AppendLine($"        Serialize = Serialize{propertyName},");
+            builder.AppendLine($"        Deserialize = Deserialize{propertyName}");
+            builder.AppendLine("    };");
             builder.AppendLine();
 
             // Add serialization methods

@@ -5,7 +5,7 @@ namespace CborSerialization;
 /// </summary>
 public abstract class CborSerializerContext
 {
-    private static readonly Dictionary<Type, CborSerializerContext> _defaultContexts = new();
+    private static readonly Dictionary<Type, CborSerializerContext> _defaultContexts = [];
 
     /// <summary>
     /// Gets the default instance of the context.

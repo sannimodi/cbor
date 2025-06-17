@@ -13,6 +13,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\CborSerialization\CborSerialization.csproj" />
+		<Analyzer Include="..\CborSerialization.Generator\bin\Debug\netstandard2.0\CborSerialization.Generator.dll" />
 	</ItemGroup>
 
 </Project>

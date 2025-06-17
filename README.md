@@ -1,34 +1,146 @@
-# cbor
+# CBOR Serialization Library
 
-This project is an experiment to create a CBOR library with AOT support, similar to System.Text.Json.
+A .NET library that provides CBOR (Concise Binary Object Representation) serialization using source generation, similar to System.Text.Json's approach. The library is fully AOT-compatible and leverages System.Formats.Cbor for the underlying CBOR operations.
+
+## Features
+
+- Source generation for AOT compatibility
+- No runtime reflection required
+- Similar API to System.Text.Json
+- Full support for .NET types
+- Efficient binary serialization
+- Native AOT support
+- Trimming-friendly
+
+## Project Structure
+
+```
+├── CborSerialization/              # Main library project
+│   ├── Attributes/                 # Serialization attributes
+│   ├── Core/                      # Core interfaces and base classes
+│   └── Runtime/                   # Runtime components
+│
+├── CborSerialization.Generator/    # Source generator project
+│   ├── Analyzers/                 # Type analyzers
+│   └── Generators/                # Code generators
+│
+├── CborSerialization.Demo/        # Demo project
+│   ├── Examples/                  # Usage examples
+│   └── AOT/                      # AOT-specific examples
+│
+└── CborSample/                    # Reference implementation (unchanged)
+```
+
+## Requirements
+
+- .NET 8 or later
+- System.Formats.Cbor package
 
 ## Installation
 
-(Details to be added)
-
-## Usage
-
-The sample project demonstrates how to serialize and deserialize data using
-`System.Formats.Cbor`.
-It includes a minimal example of code generation for CBOR where the serializer
-methods are generated at compile time for use in AOT scenarios.
-
-Build and run the console sample:
-
-This project targets **.NET 10**. Ensure the corresponding SDK is installed.
-
 ```bash
-dotnet run --project CbotSerialization
+# Add the main package
+dotnet add package CborSerialization
+
+# Add the source generator package
+dotnet add package CborSerialization.Generator
 ```
 
-The output shows the CBOR encoded bytes and the deserialized object.
+## Quick Start
+
+1. Define your model:
+
+```csharp
+[CborSerializable]
+public class Person
+{
+    [CborPropertyName("full_name")]
+    public string Name { get; set; }
+    
+    public int Age { get; set; }
+    
+    [CborIgnore]
+    public string InternalId { get; set; }
+}
+```
+
+2. Create a context:
+
+```csharp
+[CborSerializable(typeof(Person))]
+[CborSourceGenerationOptions(
+    PropertyNamingPolicy = CborKnownNamingPolicy.CamelCase
+)]
+public partial class MyCborContext : CborSerializerContext
+{
+}
+```
+
+3. Serialize/Deserialize:
+
+```csharp
+// Serialization
+byte[] cborData = CborSerializer.Serialize(person, MyCborContext.Default.Person);
+
+// Deserialization
+Person? person = CborSerializer.Deserialize<Person>(cborData, MyCborContext.Default.Person);
+```
+
+## AOT Support
+
+The library is designed to work with Native AOT. To use it in an AOT project:
+
+1. Add the source generator package
+2. Create a context class with `[CborSerializable]` attributes
+3. Use the generated serialization methods
+
+## Type Support
+
+- Primitives (int, string, bool, etc.)
+- Collections (List<T>, Dictionary<K,V>, arrays)
+- Custom classes and structs
+- Nullable types
+- Enums
+- DateTime/DateTimeOffset
+- Guid
+- Decimal
+- Nested generic types
+- Large binary data
+
+## Error Handling
+
+The library provides specific exception types:
+- `CborSerializationException`
+- `CborDeserializationException`
+- `CborValidationException`
 
 ## Contributing
 
-We welcome contributions! Please feel free to submit pull requests or open issues.
+We welcome contributions! Please follow these steps:
 
-(More detailed contributing guidelines to be added)
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run tests
+5. Submit a pull request
+
+## Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/cbor.git
+
+# Build the solution
+dotnet build
+
+# Run tests
+dotnet test
+```
 
 ## License
 
 This project is licensed under the terms of the LICENSE file.
+
+## Roadmap
+
+See the [specification document](cbor_spec_enhanced.md) for planned features and future enhancements.

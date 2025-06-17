@@ -231,7 +231,7 @@ Provide:
 - AOT deployment examples
 
 ## Technical Constraints
-- Target .NET 8 and later versions
+- Target netstandard2.0
 - Native AOT support required
 - No runtime reflection allowed
 - Minimize dependencies (only System.Formats.Cbor)

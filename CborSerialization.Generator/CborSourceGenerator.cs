@@ -57,9 +57,13 @@ public class CborSourceGenerator : IIncrementalGenerator
         sb.AppendLine("{");
         sb.AppendLine($"    partial class {className}");
         sb.AppendLine("    {");
-        sb.AppendLine("        public static byte[] Serialize(CborWriter writer)");
+        sb.AppendLine("        public static byte[] Serialize<T>(T value, CborTypeInfo<T> typeInfo)");
         sb.AppendLine("        {");
-        sb.AppendLine("            writer.WriteStartMap(null);");
+        sb.AppendLine("            var writer = new CborWriter();");
+        sb.AppendLine($"            if (typeof(T).Name == \"{className}\")");
+        sb.AppendLine("            {");
+        sb.AppendLine("                dynamic proxy = value;");
+        sb.AppendLine("                writer.WriteStartMap(null);");
         
         foreach (var prop in properties)
         {
@@ -72,12 +76,56 @@ public class CborSourceGenerator : IIncrementalGenerator
                 propName = (string)cborPropAttr.ConstructorArguments[0].Value!;
             }
 
-            sb.AppendLine($"            writer.WriteTextString(\"{propName}\");");
-            sb.AppendLine($"            writer.Write{GetCborTypeName(prop.Type)}({prop.Name});");
+            sb.AppendLine($"                writer.WriteTextString(\"{propName}\");");
+            sb.AppendLine($"                writer.Write{GetCborTypeName(prop.Type)}(proxy.{prop.Name});");
         }
 
-        sb.AppendLine("            writer.WriteEndMap();");
+        sb.AppendLine("                writer.WriteEndMap();");
+        sb.AppendLine("            }");
+        sb.AppendLine("            else");
+        sb.AppendLine("            {");
+        sb.AppendLine("                throw new NotImplementedException(\"Serialization is not implemented for this type.\");");
+        sb.AppendLine("            }");
         sb.AppendLine("            return writer.Encode();");
+        sb.AppendLine("        }");
+
+        // Generate Deserialize method
+        sb.AppendLine("        public static T Deserialize<T>(byte[] cborData, CborTypeInfo<T> typeInfo)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            var reader = new CborReader(cborData);");
+        sb.AppendLine($"            if (typeof(T).Name == \"{className}\")");
+        sb.AppendLine("            {");
+        sb.AppendLine("                reader.ReadStartMap();");
+        
+        foreach (var prop in properties)
+        {
+            var propName = prop.Name;
+            var cborPropAttr = prop.GetAttributes()
+                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "CborSerialization.CborPropertyAttribute");
+            
+            if (cborPropAttr != null)
+            {
+                propName = (string)cborPropAttr.ConstructorArguments[0].Value!;
+            }
+
+            sb.AppendLine($"                string {prop.Name.ToLower()}PropertyName = reader.ReadTextString();");
+            sb.AppendLine($"                {GetCSharpTypeName(prop.Type)} {prop.Name.ToLower()}PropertyValue = reader.Read{GetCborTypeName(prop.Type)}();");
+        }
+
+        sb.AppendLine("                reader.ReadEndMap();");
+        sb.AppendLine("                dynamic result = Activator.CreateInstance(typeof(T));");
+        
+        foreach (var prop in properties)
+        {
+            sb.AppendLine($"                result.{prop.Name} = {prop.Name.ToLower()}PropertyValue;");
+        }
+
+        sb.AppendLine("                return (T)result;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            else");
+        sb.AppendLine("            {");
+        sb.AppendLine("                throw new NotImplementedException(\"Deserialization is not implemented for this type.\");");
+        sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
@@ -95,6 +143,19 @@ public class CborSourceGenerator : IIncrementalGenerator
             SpecialType.System_Double => "Double",
             SpecialType.System_Boolean => "Boolean",
             _ => "TextString" // Default to string for unknown types
+        };
+    }
+
+    private string GetCSharpTypeName(ITypeSymbol type)
+    {
+        return type.SpecialType switch
+        {
+            SpecialType.System_String => "string",
+            SpecialType.System_Int32 => "int",
+            SpecialType.System_Int64 => "long",
+            SpecialType.System_Double => "double",
+            SpecialType.System_Boolean => "bool",
+            _ => "string" // Default to string for unknown types
         };
     }
 }

@@ -11,6 +11,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CborSerialization.Generator
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CborSerialization.Demo", "CborSerialization.Demo\CborSerialization.Demo.csproj", "{0FAB7567-B410-39E5-B625-E37D740F602C}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Context", "Context", "{6EEA4A9F-0FD7-C472-85FE-E9865E8415B8}"
+	ProjectSection(SolutionItems) = preProject
+		cbor_spec_enhanced.md = cbor_spec_enhanced.md
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU

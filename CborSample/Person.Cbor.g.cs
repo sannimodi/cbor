@@ -1,5 +1,3 @@
-using System.Formats.Cbor;
-
 public partial class Person
 {
     public static void Serialize(CborWriter writer, Person value)
@@ -15,7 +13,7 @@ public partial class Person
     public static Person Deserialize(CborReader reader)
     {
         reader.ReadStartMap();
-        string? name = null;
+        string name = null;
         int age = 0;
         for (int i = 0; i < 2; i++)
         {

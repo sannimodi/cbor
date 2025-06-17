@@ -86,6 +86,13 @@ byte[] cborData = CborSerializer.Serialize(person, MyCborContext.Default.Person)
 Person? person = CborSerializer.Deserialize<Person>(cborData, MyCborContext.Default.Person);
 ```
 
+## Current Status
+
+- ✅ Source generator successfully generates optimized serialization/deserialization code for marked types.
+- ✅ Support for basic types (primitives, custom classes) and collections (e.g., `List<Person>`) is working.
+- ✅ AOT compatibility is achieved by avoiding runtime reflection.
+- ✅ Demo project demonstrates serialization and deserialization of both single objects and collections.
+
 ## AOT Support
 
 The library is designed to work with Native AOT. To use it in an AOT project:

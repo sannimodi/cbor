@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"$HOME/.dotnet:$PATH\")",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet clean:*)"
+    ],
+    "deny": []
+  }
+}

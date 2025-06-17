@@ -186,11 +186,56 @@ public sealed class CborSourceGenerator : IIncrementalGenerator
             builder.AppendLine();
         }
 
+        // Add nullable helper methods
+        GenerateNullableHelpers(builder);
+
         builder.AppendLine("}"); // close class
         if (!string.IsNullOrEmpty(namespaceName))
             builder.AppendLine("}"); // close namespace
 
         return builder.ToString();
+    }
+
+    private static void GenerateNullableHelpers(StringBuilder builder)
+    {
+        var primitiveTypes = new[]
+        {
+            ("Int32", "ReadInt32"),
+            ("Boolean", "ReadBoolean"),
+            ("String", "ReadTextString"),
+            ("Double", "ReadDouble"),
+            ("Single", "ReadSingle"),
+            ("Int64", "ReadInt64"),
+            ("UInt32", "ReadUInt32"),
+            ("UInt64", "ReadUInt64"),
+            ("Byte", "ReadUInt32"),
+            ("SByte", "ReadInt32"),
+            ("Int16", "ReadInt32"),
+            ("UInt16", "ReadUInt32")
+        };
+
+        foreach (var (typeName, readerMethod) in primitiveTypes)
+        {
+            var castPrefix = typeName switch
+            {
+                "Byte" => "(byte)",
+                "SByte" => "(sbyte)",
+                "Int16" => "(short)",
+                "UInt16" => "(ushort)",
+                _ => ""
+            };
+
+            builder.AppendLine($"    private static {typeName}? ReadNullable{typeName}(CborReader reader)");
+            builder.AppendLine("    {");
+            builder.AppendLine("        if (reader.PeekState() == CborReaderState.Null)");
+            builder.AppendLine("        {");
+            builder.AppendLine("            reader.ReadNull();");
+            builder.AppendLine("            return null;");
+            builder.AppendLine("        }");
+            builder.AppendLine($"        return {castPrefix}reader.{readerMethod}();");
+            builder.AppendLine("    }");
+            builder.AppendLine();
+        }
     }
 
     private static string GetPropertyName(INamedTypeSymbol typeSymbol)

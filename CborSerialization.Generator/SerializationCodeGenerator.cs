@@ -16,8 +16,17 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("writer.WriteStartArray(value.Count);");
             builder.AppendLine($"foreach (var item in value)");
             builder.AppendLine("{");
-            builder.AppendLine($"    // Use the parent context's type info for the element type");
-            builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(elementType)}.Serialize(writer, item);");
+            
+            // Handle built-in types directly, complex types via context
+            if (IsBuiltInType(elementType))
+            {
+                builder.AppendLine($"    {GenerateDirectSerialization("item", elementType)}");
+            }
+            else
+            {
+                builder.AppendLine($"    // Use the parent context's type info for the element type");
+                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(elementType)}.Serialize(writer, item);");
+            }
             builder.AppendLine("}");
             builder.AppendLine("writer.WriteEndArray();");
             return builder.ToString();
@@ -47,10 +56,20 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("int? length = reader.ReadStartArray();");
             builder.AppendLine("for (int i = 0; length == null || i < length; i++)");
             builder.AppendLine("{");
-            builder.AppendLine($"    // Use the parent context's type info for the element type");
-            builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(elementType)}.Deserialize(reader);");
+            builder.AppendLine("    if (length == null && reader.PeekState() == CborReaderState.EndArray)");
+            builder.AppendLine("        break;");
+            
+            // Handle built-in types directly, complex types via context
+            if (IsBuiltInType(elementType))
+            {
+                builder.AppendLine($"    var item = {GenerateDirectDeserialization(elementType)};");
+            }
+            else
+            {
+                builder.AppendLine($"    // Use the parent context's type info for the element type");
+                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(elementType)}.Deserialize(reader);");
+            }
             builder.AppendLine("    list.Add(item);");
-            builder.AppendLine("    if (length == null && reader.PeekState() == CborReaderState.EndArray) break;");
             builder.AppendLine("}");
             builder.AppendLine("reader.ReadEndArray();");
             builder.AppendLine("return list;");
@@ -111,43 +130,51 @@ internal static class SerializationCodeGenerator
     private static string GeneratePropertySerialization(IPropertySymbol property)
     {
         var type = property.Type;
-        return type.SpecialType switch
+        
+        // Handle built-in types directly
+        if (IsBuiltInType(type))
         {
-            SpecialType.System_String => $"writer.WriteTextString(value.{property.Name});",
-            SpecialType.System_Int32 => $"writer.WriteInt32(value.{property.Name});",
-            SpecialType.System_Boolean => $"writer.WriteBoolean(value.{property.Name});",
-            SpecialType.System_Double => $"writer.WriteDouble(value.{property.Name});",
-            SpecialType.System_Single => $"writer.WriteSingle(value.{property.Name});",
-            SpecialType.System_Int64 => $"writer.WriteInt64(value.{property.Name});",
-            SpecialType.System_UInt32 => $"writer.WriteUInt32(value.{property.Name});",
-            SpecialType.System_UInt64 => $"writer.WriteUInt64(value.{property.Name});",
-            SpecialType.System_Byte => $"writer.WriteUInt32(value.{property.Name});",
-            SpecialType.System_SByte => $"writer.WriteInt32(value.{property.Name});",
-            SpecialType.System_Int16 => $"writer.WriteInt32(value.{property.Name});",
-            SpecialType.System_UInt16 => $"writer.WriteUInt32(value.{property.Name});",
-            _ => $"// TODO: Implement serialization for {type.ToDisplayString()}"
-        };
+            return GenerateDirectSerialization($"value.{property.Name}", type);
+        }
+        
+        // Handle nullable built-in types
+        if (type is INamedTypeSymbol namedType && namedType.IsGenericType && 
+            namedType.Name == "Nullable" && namedType.TypeArguments.Length == 1)
+        {
+            var underlyingType = namedType.TypeArguments[0];
+            if (IsBuiltInType(underlyingType))
+            {
+                return $"if (value.{property.Name}.HasValue) {{ {GenerateDirectSerialization($"value.{property.Name}.Value", underlyingType)} }} else {{ writer.WriteNull(); }}";
+            }
+        }
+        
+        // Handle complex types via context reference
+        return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name});";
     }
 
     private static string GeneratePropertyDeserialization(IPropertySymbol property)
     {
         var type = property.Type;
-        return type.SpecialType switch
+        
+        // Handle built-in types directly
+        if (IsBuiltInType(type))
         {
-            SpecialType.System_String => "reader.ReadTextString()",
-            SpecialType.System_Int32 => "reader.ReadInt32()",
-            SpecialType.System_Boolean => "reader.ReadBoolean()",
-            SpecialType.System_Double => "reader.ReadDouble()",
-            SpecialType.System_Single => "reader.ReadSingle()",
-            SpecialType.System_Int64 => "reader.ReadInt64()",
-            SpecialType.System_UInt32 => "reader.ReadUInt32()",
-            SpecialType.System_UInt64 => "reader.ReadUInt64()",
-            SpecialType.System_Byte => "(byte)reader.ReadUInt32()",
-            SpecialType.System_SByte => "(sbyte)reader.ReadInt32()",
-            SpecialType.System_Int16 => "(short)reader.ReadInt32()",
-            SpecialType.System_UInt16 => "(ushort)reader.ReadUInt32()",
-            _ => $"// TODO: Implement deserialization for {type.ToDisplayString()}"
-        };
+            return GenerateDirectDeserialization(type);
+        }
+        
+        // Handle nullable built-in types
+        if (type is INamedTypeSymbol namedType && namedType.IsGenericType && 
+            namedType.Name == "Nullable" && namedType.TypeArguments.Length == 1)
+        {
+            var underlyingType = namedType.TypeArguments[0];
+            if (IsBuiltInType(underlyingType))
+            {
+                return $"ReadNullable{underlyingType.Name}(reader)";
+            }
+        }
+        
+        // Handle complex types via context reference
+        return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader)";
     }
 
     private static bool IsList(INamedTypeSymbol typeSymbol, out ITypeSymbol? elementType)
@@ -172,6 +199,83 @@ internal static class SerializationCodeGenerator
             name += "Of" + string.Join("And", namedType.TypeArguments.Select(t => GetPropertyNameFromType(t)));
             return name;
         }
-        return typeSymbol.Name;
+        
+        // Handle built-in types specially - they don't need context references
+        return typeSymbol.SpecialType switch
+        {
+            SpecialType.System_String => "String",
+            SpecialType.System_Int32 => "Int32", 
+            SpecialType.System_Boolean => "Boolean",
+            SpecialType.System_Double => "Double",
+            SpecialType.System_Single => "Single",
+            SpecialType.System_Int64 => "Int64",
+            SpecialType.System_UInt32 => "UInt32",
+            SpecialType.System_UInt64 => "UInt64",
+            SpecialType.System_Byte => "Byte",
+            SpecialType.System_SByte => "SByte",
+            SpecialType.System_Int16 => "Int16",
+            SpecialType.System_UInt16 => "UInt16",
+            _ => typeSymbol.Name
+        };
+    }
+
+    private static bool IsBuiltInType(ITypeSymbol typeSymbol)
+    {
+        return typeSymbol.SpecialType switch
+        {
+            SpecialType.System_String => true,
+            SpecialType.System_Int32 => true,
+            SpecialType.System_Boolean => true,
+            SpecialType.System_Double => true,
+            SpecialType.System_Single => true,
+            SpecialType.System_Int64 => true,
+            SpecialType.System_UInt32 => true,
+            SpecialType.System_UInt64 => true,
+            SpecialType.System_Byte => true,
+            SpecialType.System_SByte => true,
+            SpecialType.System_Int16 => true,
+            SpecialType.System_UInt16 => true,
+            _ => false
+        };
+    }
+
+    private static string GenerateDirectSerialization(string variableName, ITypeSymbol typeSymbol)
+    {
+        return typeSymbol.SpecialType switch
+        {
+            SpecialType.System_String => $"writer.WriteTextString({variableName});",
+            SpecialType.System_Int32 => $"writer.WriteInt32({variableName});",
+            SpecialType.System_Boolean => $"writer.WriteBoolean({variableName});",
+            SpecialType.System_Double => $"writer.WriteDouble({variableName});",
+            SpecialType.System_Single => $"writer.WriteSingle({variableName});",
+            SpecialType.System_Int64 => $"writer.WriteInt64({variableName});",
+            SpecialType.System_UInt32 => $"writer.WriteUInt32({variableName});",
+            SpecialType.System_UInt64 => $"writer.WriteUInt64({variableName});",
+            SpecialType.System_Byte => $"writer.WriteUInt32({variableName});",
+            SpecialType.System_SByte => $"writer.WriteInt32({variableName});",
+            SpecialType.System_Int16 => $"writer.WriteInt32({variableName});",
+            SpecialType.System_UInt16 => $"writer.WriteUInt32({variableName});",
+            _ => $"// TODO: Implement direct serialization for {typeSymbol.ToDisplayString()}"
+        };
+    }
+
+    private static string GenerateDirectDeserialization(ITypeSymbol typeSymbol)
+    {
+        return typeSymbol.SpecialType switch
+        {
+            SpecialType.System_String => "reader.ReadTextString()",
+            SpecialType.System_Int32 => "reader.ReadInt32()",
+            SpecialType.System_Boolean => "reader.ReadBoolean()",
+            SpecialType.System_Double => "reader.ReadDouble()",
+            SpecialType.System_Single => "reader.ReadSingle()",
+            SpecialType.System_Int64 => "reader.ReadInt64()",
+            SpecialType.System_UInt32 => "reader.ReadUInt32()",
+            SpecialType.System_UInt64 => "reader.ReadUInt64()",
+            SpecialType.System_Byte => "(byte)reader.ReadUInt32()",
+            SpecialType.System_SByte => "(sbyte)reader.ReadInt32()",
+            SpecialType.System_Int16 => "(short)reader.ReadInt32()",
+            SpecialType.System_UInt16 => "(ushort)reader.ReadUInt32()",
+            _ => $"// TODO: Implement direct deserialization for {typeSymbol.ToDisplayString()}"
+        };
     }
 } 

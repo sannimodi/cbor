@@ -10,6 +10,9 @@ internal static class SerializationCodeGenerator
         var builder = new StringBuilder();
         if (IsList(typeSymbol, out var elementType))
         {
+            if (elementType == null)
+                throw new InvalidOperationException("Element type cannot be null for a valid list type.");
+                
             builder.AppendLine("writer.WriteStartArray(value.Count);");
             builder.AppendLine($"foreach (var item in value)");
             builder.AppendLine("{");
@@ -37,6 +40,9 @@ internal static class SerializationCodeGenerator
         var builder = new StringBuilder();
         if (IsList(typeSymbol, out var elementType))
         {
+            if (elementType == null)
+                throw new InvalidOperationException("Element type cannot be null for a valid list type.");
+                
             builder.AppendLine($"var list = new System.Collections.Generic.List<{elementType.ToDisplayString()}>();");
             builder.AppendLine("int? length = reader.ReadStartArray();");
             builder.AppendLine("for (int i = 0; length == null || i < length; i++)");

@@ -22,7 +22,7 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 2. **Build the Solution**:
    ```bash
-   dotnet build CbotSerialization.sln
+   dotnet build CbOrSerialization.sln
    ```
 
 ### Using the Source Generator Locally

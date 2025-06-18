@@ -5,3 +5,4 @@ namespace CbOrSerialization.Demo;
 public partial class MyCbOrContext : CbOrSerializerContext
 {
 } 
+

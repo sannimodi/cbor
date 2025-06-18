@@ -401,3 +401,4 @@ Features to be implemented in subsequent versions:
 
 ## Conclusion  
 This specification outlines a comprehensive CBOR serialization library that leverages source generators for efficient, AOT-compatible serialization, mirroring the approach of `System.Text.Json`. By following these guidelines, the generated code ensures high performance, reflection-free operation, and seamless integration into .NET projects with full AOT support and API similarity to System.Text.Json experience.
+

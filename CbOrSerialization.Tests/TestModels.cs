@@ -62,3 +62,4 @@ public class AllTypesModel
 public partial class TestCbOrContext : CbOrSerializerContext
 {
 }
+

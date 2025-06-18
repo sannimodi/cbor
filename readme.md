@@ -13,7 +13,7 @@ See the [specification document](CbOrSerializationSpec.md) for learning more abo
 - ✅ Efficient binary serialization
 - ✅ Native AOT support
 - ✅ Trimming-friendly
-- ✅ Comprehensive test suite (47 tests)
+- ✅ Comprehensive test suite (38 tests)
 - ✅ Nullable type support
 - ✅ Custom attributes (CbOrPropertyName, CbOrIgnore, CbOrDefaultValue)
 
@@ -28,10 +28,9 @@ See the [specification document](CbOrSerializationSpec.md) for learning more abo
 │
 ├── CborSerialization.Generator/    # Source generator project
 │   ├── CborSourceGenerator.cs      # Incremental source generator
-│   ├── CborSyntaxReceiver.cs       # Syntax analysis
 │   └── SerializationCodeGenerator.cs # Code generation logic
 │
-├── CborSerialization.Tests/       # Comprehensive test suite (47 tests)
+├── CborSerialization.Tests/       # Comprehensive test suite (38 tests)
 │   ├── CborSerializerTests.cs      # Core serialization tests
 │   ├── CborSerializerErrorTests.cs # Error handling tests
 │   ├── AttributeTests.cs           # Attribute functionality tests
@@ -146,7 +145,7 @@ The library provides comprehensive error handling:
 - ✅ **Enhanced CborSerializer** with try-catch blocks and detailed error messages
 - ✅ **Parameter validation** with ArgumentNullException for null inputs
 - ✅ **CBOR format validation** with descriptive error messages
-- ✅ **Comprehensive error test suite** (8 tests) covering edge cases and invalid inputs
+- ✅ **Comprehensive error test suite** (19 tests) covering edge cases and invalid inputs
 
 ### Future Exception Types (Planned)
 - `CborSerializationException`
@@ -172,7 +171,7 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (47 tests)
+# Run the comprehensive test suite (38 tests)
 dotnet test CborSerialization.Tests/
 
 # Run the demo
@@ -181,12 +180,12 @@ dotnet run --project CborSerialization.Demo/
 
 ## Test Results
 
-The library includes a comprehensive test suite with **47 tests, 0 failures**:
+The library includes a comprehensive test suite with **38 tests, 0 failures**:
 
-- **CborSerializerTests** (11 tests): Core serialization functionality
-- **CborSerializerErrorTests** (8 tests): Error handling and edge cases  
-- **AttributeTests** (12 tests): Attribute functionality validation
-- **SourceGeneratorTests** (16 tests): Generated code validation
+- **CborSerializerTests** (9 tests): Core serialization functionality
+- **CbOrSerializerErrorTests** (19 tests): Error handling and edge cases
+- **AttributeTests** (9 tests): Attribute functionality validation
+- **SourceGeneratorTests** (10 tests): Generated code validation
 
 All tests demonstrate the library's reliability and production readiness.
 
@@ -230,3 +229,4 @@ See the [ROADMAP](roadmap.md) for planned features and future enhancements.
 - Performance benchmark results
 - Migration guides
 - Best practices guide
+

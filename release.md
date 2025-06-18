@@ -22,7 +22,7 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 2. **Build the Solution**:
    ```bash
-   dotnet build CbotSerialization.sln
+   dotnet build CbOrSerialization.sln
    ```
 
 ### Using the Source Generator Locally
@@ -88,7 +88,6 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 ### Key Components
 
 - **CborSourceGenerator**: The main generator class that implements `IIncrementalGenerator`.
-- **CborSyntaxReceiver**: Collects syntax nodes for processing.
 - **SerializationCodeGenerator**: Generates the serialization and deserialization code.
 
 ## Troubleshooting
@@ -111,3 +110,4 @@ This project is licensed under the terms of the LICENSE file.
 ---
 
 For more details, refer to the [specification document](cbor_spec_enhanced.md). 
+

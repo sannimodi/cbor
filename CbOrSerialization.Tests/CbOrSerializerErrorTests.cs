@@ -147,3 +147,4 @@ public class CbOrSerializerErrorTests
         deserialized.Name.Should().Be(value);
     }
 }
+

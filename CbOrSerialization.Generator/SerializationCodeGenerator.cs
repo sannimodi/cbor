@@ -1,6 +1,3 @@
-using System.Text;
-using Microsoft.CodeAnalysis;
-
 namespace CbOrSerialization.Generator;
 
 internal static class SerializationCodeGenerator
@@ -196,7 +193,7 @@ internal static class SerializationCodeGenerator
             int backtickIndex = name.IndexOf('`');
             if (backtickIndex >= 0)
                 name = name.Substring(0, backtickIndex);
-            name += "Of" + string.Join("And", namedType.TypeArguments.Select(t => GetPropertyNameFromType(t)));
+            name += "Of" + string.Join("And", namedType.TypeArguments.Select(GetPropertyNameFromType));
             return name;
         }
         

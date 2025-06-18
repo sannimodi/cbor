@@ -1,5 +1,3 @@
-using CbOrSerialization;
-
 namespace CbOrSerialization.Tests;
 
 /// <summary>

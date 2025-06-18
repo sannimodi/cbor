@@ -1,10 +1,3 @@
-using System.Text;
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
-
 namespace CbOrSerialization.Generator;
 
 [Generator(LanguageNames.CSharp)]
@@ -15,7 +8,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         // Find all partial class declarations
         var classDeclarations = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: (node, _) => node is ClassDeclarationSyntax c && c.Modifiers.Any(m => m.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.PartialKeyword)),
+                predicate: (node, _) => node is ClassDeclarationSyntax c && c.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
                 transform: (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
             .Where(cls => cls != null);
 
@@ -25,7 +18,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(compilationAndClasses, (spc, source) => GenerateSource(spc, source.Left, source.Right));
     }
 
-    private void GenerateSource(SourceProductionContext context, Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes)
+    private static void GenerateSource(SourceProductionContext context, Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes)
     {
         // Diagnostic: generator running
         context.ReportDiagnostic(Diagnostic.Create(
@@ -33,8 +26,8 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
                 "CBOR001", "CbOr Generator", "CbOr source generator running. Found {0} partial classes.", "Debug", DiagnosticSeverity.Info, true),
             Location.None, classes.Length));
 
-        var cborSerializableAttributeSymbol = compilation.GetTypeByMetadataName("CbOrSerialization.CbOrSerializableAttribute");
-        if (cborSerializableAttributeSymbol == null)
+        var cbOrSerializableAttributeSymbol = compilation.GetTypeByMetadataName("CbOrSerialization.CbOrSerializableAttribute");
+        if (cbOrSerializableAttributeSymbol == null)
         {
             context.ReportDiagnostic(Diagnostic.Create(
                 new DiagnosticDescriptor("CBOR002", "CbOr Generator", "Could not find CbOrSerializableAttribute.", "Error", DiagnosticSeverity.Error, true),
@@ -45,14 +38,14 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         foreach (var classDecl in classes)
         {
             var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
-            var typeSymbol = model.GetDeclaredSymbol(classDecl) as INamedTypeSymbol;
+            var typeSymbol = model.GetDeclaredSymbol(classDecl);
             if (typeSymbol == null)
                 continue;
 
-            // Only process context classes with [CbOrSerializable] attributes
+            // Only process context classes with [CborSerializable] attributes
             var serializableAttributes = typeSymbol.GetAttributes()
-                .Where(attr => SymbolEqualityComparer.Default.Equals(attr.AttributeClass, cborSerializableAttributeSymbol))
-                .ToList();
+                .Where(attr => SymbolEqualityComparer.Default.Equals(attr.AttributeClass, cbOrSerializableAttributeSymbol))
+                .ToImmutableArray();
 
             if (!serializableAttributes.Any())
                 continue;
@@ -63,7 +56,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
                 Location.None, typeSymbol.Name));
 
             var source = GenerateContextSource(typeSymbol, serializableAttributes);
-            
+
             // Diagnostic: show generated code
             var lines = source.Split('\n');
             for (int i = 0; i < lines.Length; i++)
@@ -77,7 +70,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         }
     }
 
-    private static string GenerateContextSource(INamedTypeSymbol contextType, List<AttributeData> serializableAttributes)
+    private static string GenerateContextSource(INamedTypeSymbol contextType, ImmutableArray<AttributeData> serializableAttributes)
     {
         var builder = new StringBuilder();
         var namespaceName = contextType.ContainingNamespace.IsGlobalNamespace ? null : contextType.ContainingNamespace.ToDisplayString();
@@ -113,13 +106,20 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         builder.AppendLine("        return typeof(T) switch");
         builder.AppendLine("        {");
 
-        foreach (var attr in serializableAttributes)
+        foreach (var args in serializableAttributes.Select(x => x.ConstructorArguments))
         {
-            if (attr.ConstructorArguments.Length == 0)
+            if (args.Length == 0)
+            {
                 continue;
-            var typeArg = attr.ConstructorArguments[0];
+            }
+
+            var typeArg = args[0];
+
             if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            {
                 continue;
+            }
+
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var propertyName = GetPropertyName(typeSymbol);
             builder.AppendLine($"            Type t when t == typeof({typeName}) => (CbOrTypeInfo<T>)(object){propertyName},");
@@ -131,13 +131,20 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         builder.AppendLine();
 
         // Add type info properties for each serializable type
-        foreach (var attr in serializableAttributes)
+        foreach (var args in serializableAttributes.Select(x => x.ConstructorArguments))
         {
-            if (attr.ConstructorArguments.Length == 0)
+            if (args.Length == 0)
+            {
                 continue;
-            var typeArg = attr.ConstructorArguments[0];
+            }
+
+            var typeArg = args[0];
+
             if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            {
                 continue;
+            }
+
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var propertyName = GetPropertyNameFromType(typeSymbol);
             builder.AppendLine($"    public CbOrTypeInfo<{typeName}> {propertyName} {{ get; }}");
@@ -146,27 +153,42 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         // Add constructor to initialize type info properties with 'this'
         builder.AppendLine($"    public {contextType.Name}()");
         builder.AppendLine("    {");
-        foreach (var attr in serializableAttributes)
+
+        foreach (var args in serializableAttributes.Select(x => x.ConstructorArguments))
         {
-            if (attr.ConstructorArguments.Length == 0)
+            if (args.Length == 0)
+            {
                 continue;
-            var typeArg = attr.ConstructorArguments[0];
+            }
+
+            var typeArg = args[0];
+
             if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            {
                 continue;
-            var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            }
+
             var propertyName = GetPropertyNameFromType(typeSymbol);
             builder.AppendLine($"        {propertyName} = new {propertyName}TypeInfo(this);");
         }
+
         builder.AppendLine("    }");
 
         // Add type info implementations for each serializable type
-        foreach (var attr in serializableAttributes)
+        foreach (var args in serializableAttributes.Select(x => x.ConstructorArguments))
         {
-            if (attr.ConstructorArguments.Length == 0)
+            if (args.Length == 0)
+            {
                 continue;
-            var typeArg = attr.ConstructorArguments[0];
+            }
+
+            var typeArg = args[0];
+
             if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            {
                 continue;
+            }
+
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var propertyName = GetPropertyNameFromType(typeSymbol);
             builder.AppendLine($"    private sealed class {propertyName}TypeInfo : CbOrTypeInfo<{typeName}>");
@@ -191,7 +213,9 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
 
         builder.AppendLine("}"); // close class
         if (!string.IsNullOrEmpty(namespaceName))
+        {
             builder.AppendLine("}"); // close namespace
+        }
 
         return builder.ToString();
     }
@@ -245,14 +269,18 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         if (typeSymbol.IsGenericType)
         {
             if (backtickIndex >= 0)
+            {
                 name = name.Substring(0, backtickIndex);
+            }
+
             // Use 'Of' to join type arguments for uniqueness and readability
-            name += "Of" + string.Join("And", typeSymbol.TypeArguments.Select(t => GetPropertyNameFromType(t)));
+            name += "Of" + string.Join("And", typeSymbol.TypeArguments.Select(GetPropertyNameFromType));
         }
         else if (backtickIndex >= 0)
         {
             name = name.Substring(0, backtickIndex);
         }
+
         return name;
     }
 
@@ -264,7 +292,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
             int backtickIndex = name.IndexOf('`');
             if (backtickIndex >= 0)
                 name = name.Substring(0, backtickIndex);
-            name += "Of" + string.Join("And", namedType.TypeArguments.Select(t => GetPropertyNameFromType(t)));
+            name += "Of" + string.Join("And", namedType.TypeArguments.Select(GetPropertyNameFromType));
             return name;
         }
         else if (typeSymbol is INamedTypeSymbol namedType2)
@@ -275,6 +303,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
                 name = name.Substring(0, backtickIndex);
             return name;
         }
+
         return typeSymbol.Name;
     }
 }

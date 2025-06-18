@@ -1,22 +1,20 @@
-using System.Reflection;
-
 namespace CbOrSerialization.Tests;
 
 public class SourceGeneratorTests
 {
     [Fact]
-    public void TestCborContext_Default_IsNotNull()
+    public void TestCbOrContext_Default_IsNotNull()
     {
         // Act
         var context = TestCbOrContext.Default;
 
         // Assert
         context.Should().NotBeNull();
-        context.Should().BeOfType<TestCborContext>();
+        context.Should().BeOfType<TestCbOrContext>();
     }
 
     [Fact]
-    public void TestCborContext_HasExpectedTypeInfoProperties()
+    public void TestCbOrContext_HasExpectedTypeInfoProperties()
     {
         // Arrange
         var context = TestCbOrContext.Default;
@@ -37,7 +35,7 @@ public class SourceGeneratorTests
     }
 
     [Fact]
-    public void TestCborContext_TypeInfoProperties_ReturnValidInstances()
+    public void TestCbOrContext_TypeInfoProperties_ReturnValidInstances()
     {
         // Arrange
         var context = TestCbOrContext.Default;
@@ -50,7 +48,7 @@ public class SourceGeneratorTests
     }
 
     [Fact]
-    public void TestCborContext_GetTypeInfo_ReturnsCorrectTypeInfo()
+    public void TestCbOrContext_GetTypeInfo_ReturnsCorrectTypeInfo()
     {
         // Arrange
         var context = TestCbOrContext.Default;
@@ -68,13 +66,13 @@ public class SourceGeneratorTests
     }
 
     [Fact]
-    public void TestCborContext_GetTypeInfo_UnsupportedType_ThrowsException()
+    public void TestCbOrContext_GetTypeInfo_UnsupportedType_ThrowsException()
     {
         // Arrange
         var context = TestCbOrContext.Default;
 
         // Act & Assert
-        var act = () => context.GetTypeInfo<DateTime>(); // DateTime not registered
+        var act = context.GetTypeInfo<DateTime>; // DateTime not registered
         act.Should().Throw<ArgumentException>()
            .WithMessage("*Type System.DateTime is not registered for serialization*");
     }
@@ -143,8 +141,8 @@ public class SourceGeneratorTests
     public void GeneratedContext_IsSingleton()
     {
         // Act
-        var context1 = TestCborContext.Default;
-        var context2 = TestCborContext.Default;
+        var context1 = TestCbOrContext.Default;
+        var context2 = TestCbOrContext.Default;
 
         // Assert
         context1.Should().BeSameAs(context2);

@@ -1,5 +1,3 @@
-using System.Formats.Cbor;
-
 namespace CbOrSerialization.Tests;
 
 public class AttributeTests
@@ -7,7 +5,7 @@ public class AttributeTests
     private readonly TestCbOrContext _context = TestCbOrContext.Default;
 
     [Fact]
-    public void CborPropertyName_CustomName_IsUsedInSerialization()
+    public void CbOrPropertyName_CustomName_IsUsedInSerialization()
     {
         // Arrange
         var model = new ModelWithAttributes
@@ -35,7 +33,7 @@ public class AttributeTests
     }
 
     [Fact]
-    public void CborIgnore_IgnoredProperty_NotIncludedInSerialization()
+    public void CbOrIgnore_IgnoredProperty_NotIncludedInSerialization()
     {
         // Arrange
         var model = new ModelWithAttributes
@@ -63,7 +61,7 @@ public class AttributeTests
     }
 
     [Fact]
-    public void CborIgnore_RoundTrip_IgnoredPropertyNotAffected()
+    public void CbOrIgnore_RoundTrip_IgnoredPropertyNotAffected()
     {
         // Arrange
         var original = new ModelWithAttributes
@@ -84,7 +82,7 @@ public class AttributeTests
     }
 
     [Fact]
-    public void CborDefaultValue_DefaultValue_HandledCorrectly()
+    public void CbOrDefaultValue_DefaultValue_HandledCorrectly()
     {
         // Arrange
         var model1 = new ModelWithAttributes
@@ -114,12 +112,12 @@ public class AttributeTests
     }
 
     [Fact]
-    public void CborSerializable_RegisteredTypes_CanBeUsed()
+    public void CbOrSerializable_RegisteredTypes_CanBeUsed()
     {
         // Act & Assert - If these don't throw, the types are properly registered
-        var act1 = () => _context.GetTypeInfo<SimpleModel>();
-        var act2 = () => _context.GetTypeInfo<ModelWithAttributes>();
-        var act3 = () => _context.GetTypeInfo<List<SimpleModel>>();
+        var act1 = _context.GetTypeInfo<SimpleModel>;
+        var act2 = _context.GetTypeInfo<ModelWithAttributes>;
+        var act3 = _context.GetTypeInfo<List<SimpleModel>>;
 
         act1.Should().NotThrow();
         act2.Should().NotThrow();
@@ -127,10 +125,10 @@ public class AttributeTests
     }
 
     [Fact]
-    public void CborSerializable_NonRegisteredType_ThrowsException()
+    public void CbOrSerializable_NonRegisteredType_ThrowsException()
     {
         // Act & Assert
-        var act = () => _context.GetTypeInfo<Dictionary<string, int>>(); // Not registered
+        var act = _context.GetTypeInfo<Dictionary<string, int>>; // Not registered
         act.Should().Throw<ArgumentException>()
            .WithMessage("*not registered for serialization*");
     }

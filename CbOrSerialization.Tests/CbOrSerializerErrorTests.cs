@@ -20,7 +20,7 @@ public class CbOrSerializerErrorTests
     public void Deserialize_NullData_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var act = () => CbOrSerializer.Deserialize<SimpleModel>(null!, _context.SimpleModel);
+        var act = () => CbOrSerializer.Deserialize(null!, _context.SimpleModel);
         act.Should().Throw<ArgumentNullException>()
            .WithParameterName("data");
     }
@@ -51,7 +51,7 @@ public class CbOrSerializerErrorTests
     }
 
     [Fact]
-    public void Deserialize_InvalidCborData_ThrowsFormatException()
+    public void Deserialize_InvalidCbOrData_ThrowsFormatException()
     {
         // Arrange
         var invalidData = new byte[] { 0xFF, 0xFE, 0xFD }; // Invalid CBOR
@@ -63,7 +63,7 @@ public class CbOrSerializerErrorTests
     }
 
     [Fact]
-    public void Deserialize_PartialCborData_ThrowsException()
+    public void Deserialize_PartialCbOrData_ThrowsException()
     {
         // Arrange
         var partialData = new byte[] { 0xA1 }; // Start of map but incomplete
@@ -74,7 +74,7 @@ public class CbOrSerializerErrorTests
     }
 
     [Fact]
-    public void Deserialize_WrongCborType_ThrowsException()
+    public void Deserialize_WrongCbOrType_ThrowsException()
     {
         // Arrange
         var stringData = new byte[] { 0x64, 0x74, 0x65, 0x73, 0x74 }; // CBOR string "test"

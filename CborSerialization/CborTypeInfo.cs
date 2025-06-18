@@ -1,11 +1,11 @@
 using System.Formats.Cbor;
 
-namespace CborSerialization;
+namespace CbOrSerialization;
 
 /// <summary>
 /// Provides type information and serialization methods for a specific type.
 /// </summary>
-public abstract class CborTypeInfo<T>
+public abstract class CbOrTypeInfo<T>
 {
     /// <summary>
     /// Gets the type that this instance provides information for.

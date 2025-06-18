@@ -1,10 +1,10 @@
 using System.Formats.Cbor;
 
-namespace CborSerialization.Tests;
+namespace CbOrSerialization.Tests;
 
-public class CborSerializerTests
+public class CbOrSerializerTests
 {
-    private readonly TestCborContext _context = TestCborContext.Default;
+    private readonly TestCbOrContext _context = TestCbOrContext.Default;
 
     [Fact]
     public void Serialize_SimpleModel_ReturnsValidCborData()
@@ -18,7 +18,7 @@ public class CborSerializerTests
         };
 
         // Act
-        var result = CborSerializer.Serialize(model, _context.SimpleModel);
+        var result = CbOrSerializer.Serialize(model, _context.SimpleModel);
 
         // Assert
         result.Should().NotBeNull();
@@ -39,10 +39,10 @@ public class CborSerializerTests
             Age = 25,
             IsActive = false
         };
-        var cborData = CborSerializer.Serialize(original, _context.SimpleModel);
+        var cborData = CbOrSerializer.Serialize(original, _context.SimpleModel);
 
         // Act
-        var deserialized = CborSerializer.Deserialize(cborData, _context.SimpleModel);
+        var deserialized = CbOrSerializer.Deserialize(cborData, _context.SimpleModel);
 
         // Assert
         deserialized.Should().NotBeNull();
@@ -63,8 +63,8 @@ public class CborSerializerTests
         };
 
         // Act
-        var serialized = CborSerializer.Serialize(original, _context.SimpleModel);
-        var deserialized = CborSerializer.Deserialize(serialized, _context.SimpleModel);
+        var serialized = CbOrSerializer.Serialize(original, _context.SimpleModel);
+        var deserialized = CbOrSerializer.Deserialize(serialized, _context.SimpleModel);
 
         // Assert
         deserialized.Should().BeEquivalentTo(original);
@@ -83,7 +83,7 @@ public class CborSerializerTests
         };
 
         // Act
-        var result = CborSerializer.Serialize(model, _context.ModelWithAttributes);
+        var result = CbOrSerializer.Serialize(model, _context.ModelWithAttributes);
 
         // Assert
         result.Should().NotBeNull();
@@ -116,7 +116,7 @@ public class CborSerializerTests
         };
 
         // Act
-        var result = CborSerializer.Serialize(models, _context.ListOfSimpleModel);
+        var result = CbOrSerializer.Serialize(models, _context.ListOfSimpleModel);
 
         // Assert
         result.Should().NotBeNull();
@@ -139,8 +139,8 @@ public class CborSerializerTests
         };
 
         // Act
-        var serialized = CborSerializer.Serialize(original, _context.ListOfSimpleModel);
-        var deserialized = CborSerializer.Deserialize(serialized, _context.ListOfSimpleModel);
+        var serialized = CbOrSerializer.Serialize(original, _context.ListOfSimpleModel);
+        var deserialized = CbOrSerializer.Deserialize(serialized, _context.ListOfSimpleModel);
 
         // Assert
         deserialized.Should().HaveCount(original.Count);
@@ -170,12 +170,12 @@ public class CborSerializerTests
         };
 
         // Act & Assert - Should not throw
-        var result = CborSerializer.Serialize(model, _context.AllTypesModel);
+        var result = CbOrSerializer.Serialize(model, _context.AllTypesModel);
         result.Should().NotBeNull();
         result.Should().NotBeEmpty();
 
         // Verify round trip works
-        var deserialized = CborSerializer.Deserialize(result, _context.AllTypesModel);
+        var deserialized = CbOrSerializer.Deserialize(result, _context.AllTypesModel);
         deserialized.StringValue.Should().Be(model.StringValue);
         deserialized.IntValue.Should().Be(model.IntValue);
         deserialized.BoolValue.Should().Be(model.BoolValue);
@@ -189,8 +189,8 @@ public class CborSerializerTests
         var model = new SimpleModel { Name = "", Age = 0, IsActive = false };
 
         // Act
-        var result = CborSerializer.Serialize(model, _context.SimpleModel);
-        var deserialized = CborSerializer.Deserialize(result, _context.SimpleModel);
+        var result = CbOrSerializer.Serialize(model, _context.SimpleModel);
+        var deserialized = CbOrSerializer.Deserialize(result, _context.SimpleModel);
 
         // Assert
         deserialized.Name.Should().Be("");
@@ -206,8 +206,8 @@ public class CborSerializerTests
         var model = new SimpleModel { Name = largeString, Age = 1, IsActive = true };
 
         // Act
-        var result = CborSerializer.Serialize(model, _context.SimpleModel);
-        var deserialized = CborSerializer.Deserialize(result, _context.SimpleModel);
+        var result = CbOrSerializer.Serialize(model, _context.SimpleModel);
+        var deserialized = CbOrSerializer.Deserialize(result, _context.SimpleModel);
 
         // Assert
         deserialized.Name.Should().Be(largeString);

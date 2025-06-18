@@ -1,10 +1,10 @@
 using System.Formats.Cbor;
 
-namespace CborSerialization.Tests;
+namespace CbOrSerialization.Tests;
 
 public class AttributeTests
 {
-    private readonly TestCborContext _context = TestCborContext.Default;
+    private readonly TestCbOrContext _context = TestCbOrContext.Default;
 
     [Fact]
     public void CborPropertyName_CustomName_IsUsedInSerialization()
@@ -17,7 +17,7 @@ public class AttributeTests
         };
 
         // Act
-        var data = CborSerializer.Serialize(model, _context.ModelWithAttributes);
+        var data = CbOrSerializer.Serialize(model, _context.ModelWithAttributes);
 
         // Assert
         var reader = new CborReader(data);
@@ -46,7 +46,7 @@ public class AttributeTests
         };
 
         // Act
-        var data = CborSerializer.Serialize(model, _context.ModelWithAttributes);
+        var data = CbOrSerializer.Serialize(model, _context.ModelWithAttributes);
 
         // Assert
         var reader = new CborReader(data);
@@ -74,8 +74,8 @@ public class AttributeTests
         };
 
         // Act
-        var data = CborSerializer.Serialize(original, _context.ModelWithAttributes);
-        var deserialized = CborSerializer.Deserialize(data, _context.ModelWithAttributes);
+        var data = CbOrSerializer.Serialize(original, _context.ModelWithAttributes);
+        var deserialized = CbOrSerializer.Deserialize(data, _context.ModelWithAttributes);
 
         // Assert
         deserialized.Name.Should().Be(original.Name);
@@ -102,11 +102,11 @@ public class AttributeTests
         };
 
         // Act
-        var data1 = CborSerializer.Serialize(model1, _context.ModelWithAttributes);
-        var data2 = CborSerializer.Serialize(model2, _context.ModelWithAttributes);
+        var data1 = CbOrSerializer.Serialize(model1, _context.ModelWithAttributes);
+        var data2 = CbOrSerializer.Serialize(model2, _context.ModelWithAttributes);
 
-        var deserialized1 = CborSerializer.Deserialize(data1, _context.ModelWithAttributes);
-        var deserialized2 = CborSerializer.Deserialize(data2, _context.ModelWithAttributes);
+        var deserialized1 = CbOrSerializer.Deserialize(data1, _context.ModelWithAttributes);
+        var deserialized2 = CbOrSerializer.Deserialize(data2, _context.ModelWithAttributes);
 
         // Assert
         deserialized1.IsEnabled.Should().Be(true);
@@ -143,11 +143,11 @@ public class AttributeTests
         var attributed = new ModelWithAttributes { Name = "Attributed", Age = 20 };
 
         // Act
-        var simpleData = CborSerializer.Serialize(simple, _context.SimpleModel);
-        var attributedData = CborSerializer.Serialize(attributed, _context.ModelWithAttributes);
+        var simpleData = CbOrSerializer.Serialize(simple, _context.SimpleModel);
+        var attributedData = CbOrSerializer.Serialize(attributed, _context.ModelWithAttributes);
 
-        var deserializedSimple = CborSerializer.Deserialize(simpleData, _context.SimpleModel);
-        var deserializedAttributed = CborSerializer.Deserialize(attributedData, _context.ModelWithAttributes);
+        var deserializedSimple = CbOrSerializer.Deserialize(simpleData, _context.SimpleModel);
+        var deserializedAttributed = CbOrSerializer.Deserialize(attributedData, _context.ModelWithAttributes);
 
         // Assert
         deserializedSimple.Name.Should().Be("Simple");
@@ -169,8 +169,8 @@ public class AttributeTests
         // Act & Assert - Should not throw
         var act = () =>
         {
-            var data = CborSerializer.Serialize(model, _context.ModelWithAttributes);
-            return CborSerializer.Deserialize(data, _context.ModelWithAttributes);
+            var data = CbOrSerializer.Serialize(model, _context.ModelWithAttributes);
+            return CbOrSerializer.Deserialize(data, _context.ModelWithAttributes);
         };
 
         act.Should().NotThrow();
@@ -189,8 +189,8 @@ public class AttributeTests
         };
 
         // Act
-        var data = CborSerializer.Serialize(model, _context.ModelWithAttributes);
-        var deserialized = CborSerializer.Deserialize(data, _context.ModelWithAttributes);
+        var data = CbOrSerializer.Serialize(model, _context.ModelWithAttributes);
+        var deserialized = CbOrSerializer.Deserialize(data, _context.ModelWithAttributes);
 
         // Assert
         deserialized.Name.Should().Be("Case Test");

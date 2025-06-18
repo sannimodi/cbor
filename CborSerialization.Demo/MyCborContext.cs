@@ -1,7 +1,7 @@
-namespace CborSerialization.Demo;
+namespace CbOrSerialization.Demo;
 
-[CborSerializable(typeof(Person))]
-[CborSerializable(typeof(List<Person>))]
-public partial class MyCborContext : CborSerializerContext
+[CbOrSerializable(typeof(Person))]
+[CbOrSerializable(typeof(List<Person>))]
+public partial class MyCbOrContext : CbOrSerializerContext
 {
 } 

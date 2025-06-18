@@ -1,4 +1,4 @@
-﻿namespace CborSerialization.Demo;
+﻿namespace CbOrSerialization.Demo;
 
 // Define a simple model
 public class Person

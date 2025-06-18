@@ -1,7 +1,7 @@
 using System.Text;
 using Microsoft.CodeAnalysis;
 
-namespace CborSerialization.Generator;
+namespace CbOrSerialization.Generator;
 
 internal static class SerializationCodeGenerator
 {
@@ -111,13 +111,13 @@ internal static class SerializationCodeGenerator
     private static bool HasIgnoreAttribute(IPropertySymbol property)
     {
         return property.GetAttributes()
-            .Any(attr => attr.AttributeClass?.ToDisplayString() == "CborSerialization.CborIgnoreAttribute");
+            .Any(attr => attr.AttributeClass?.ToDisplayString() == "CbOrSerialization.CbOrIgnoreAttribute");
     }
 
     private static string GetPropertyName(IPropertySymbol property)
     {
         var nameAttr = property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "CborSerialization.CborPropertyNameAttribute");
+            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "CbOrSerialization.CbOrPropertyNameAttribute");
 
         if (nameAttr != null && nameAttr.ConstructorArguments.Length > 0)
         {

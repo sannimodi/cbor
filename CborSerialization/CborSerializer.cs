@@ -1,11 +1,11 @@
 using System.Formats.Cbor;
 
-namespace CborSerialization;
+namespace CbOrSerialization;
 
 /// <summary>
 /// Provides static methods for CBOR serialization and deserialization.
 /// </summary>
-public static class CborSerializer
+public static class CbOrSerializer
 {
     /// <summary>
     /// Serializes the specified value to CBOR format.
@@ -15,7 +15,7 @@ public static class CborSerializer
     /// <param name="typeInfo">The type information for serialization.</param>
     /// <returns>The serialized CBOR data.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="typeInfo"/> is null.</exception>
-    public static byte[] Serialize<T>(T value, CborTypeInfo<T> typeInfo)
+    public static byte[] Serialize<T>(T value, CbOrTypeInfo<T> typeInfo)
     {
         if (typeInfo == null)
             throw new ArgumentNullException(nameof(typeInfo));
@@ -45,7 +45,7 @@ public static class CborSerializer
     /// <returns>The deserialized value.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="data"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="data"/> is empty.</exception>
-    public static T Deserialize<T>(byte[] data, CborTypeInfo<T> typeInfo)
+    public static T Deserialize<T>(byte[] data, CbOrTypeInfo<T> typeInfo)
     {
         if (data == null)
             throw new ArgumentNullException(nameof(data));

@@ -1,6 +1,6 @@
-using CborSerialization;
+using CbOrSerialization;
 
-namespace CborSerialization.Tests;
+namespace CbOrSerialization.Tests;
 
 /// <summary>
 /// Test models for CBOR serialization testing
@@ -14,15 +14,15 @@ public class SimpleModel
 
 public class ModelWithAttributes
 {
-    [CborPropertyName("full_name")]
+    [CbOrPropertyName("full_name")]
     public string Name { get; set; } = string.Empty;
     
     public int Age { get; set; }
     
-    [CborIgnore]
+    [CbOrIgnore]
     public string InternalId { get; set; } = string.Empty;
     
-    [CborDefaultValue(true)]
+    [CbOrDefaultValue(true)]
     public bool IsEnabled { get; set; } = true;
 }
 
@@ -55,12 +55,12 @@ public class AllTypesModel
 }
 
 // Test context for source generator
-[CborSerializable(typeof(SimpleModel))]
-[CborSerializable(typeof(ModelWithAttributes))]
-[CborSerializable(typeof(NestedModel))]
-[CborSerializable(typeof(AllTypesModel))]
-[CborSerializable(typeof(List<SimpleModel>))]
-[CborSerializable(typeof(List<string>))]
-public partial class TestCborContext : CborSerializerContext
+[CbOrSerializable(typeof(SimpleModel))]
+[CbOrSerializable(typeof(ModelWithAttributes))]
+[CbOrSerializable(typeof(NestedModel))]
+[CbOrSerializable(typeof(AllTypesModel))]
+[CbOrSerializable(typeof(List<SimpleModel>))]
+[CbOrSerializable(typeof(List<string>))]
+public partial class TestCbOrContext : CbOrSerializerContext
 {
 }

@@ -1,18 +1,18 @@
 ﻿// Create a sample person
-using CborSerialization;
-using CborSerialization.Demo;
+using CbOrSerialization;
+using CbOrSerialization.Demo;
 
 var person = new Person { Name = "John Doe", Age = 30, IsActive = true };
 
 // Serialize to CBOR
-var cborData = CborSerializer.Serialize(person, MyCborContext.Default.Person);
+var cborData = CbOrSerializer.Serialize(person, MyCbOrContext.Default.Person);
 
 // Print the CBOR data
 Console.WriteLine("CBOR Data (hex):");
 Console.WriteLine(BitConverter.ToString(cborData));
 
 // Deserialize back
-var deserializedPerson = CborSerializer.Deserialize(cborData, MyCborContext.Default.Person);
+var deserializedPerson = CbOrSerializer.Deserialize(cborData, MyCbOrContext.Default.Person);
 
 // Print the deserialized data
 Console.WriteLine("\nDeserialized Person:");
@@ -26,10 +26,10 @@ var people = new List<Person>
     new Person { Name = "Alice", Age = 25, IsActive = true },
     new Person { Name = "Bob", Age = 35, IsActive = false }
 };
-var listCborData = CborSerializer.Serialize(people, MyCborContext.Default.ListOfPerson);
+var listCborData = CbOrSerializer.Serialize(people, MyCbOrContext.Default.ListOfPerson);
 Console.WriteLine("\nCBOR Data for List<Person> (hex):");
 Console.WriteLine(BitConverter.ToString(listCborData));
-var deserializedPeople = CborSerializer.Deserialize<List<Person>>(listCborData, MyCborContext.Default.ListOfPerson);
+var deserializedPeople = CbOrSerializer.Deserialize<List<Person>>(listCborData, MyCbOrContext.Default.ListOfPerson);
 Console.WriteLine("\nDeserialized List<Person>:");
 foreach (var p in deserializedPeople)
 {

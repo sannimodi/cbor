@@ -3,7 +3,13 @@
     "allow": [
       "Bash(export PATH=\"$HOME/.dotnet:$PATH\")",
       "Bash(dotnet build:*)",
-      "Bash(dotnet clean:*)"
+      "Bash(dotnet clean:*)",
+      "Bash(find:*)",
+      "Bash(mv:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)"
     ],
     "deny": []
   }

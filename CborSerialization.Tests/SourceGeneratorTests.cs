@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace CborSerialization.Tests;
+namespace CbOrSerialization.Tests;
 
 public class SourceGeneratorTests
 {
@@ -8,7 +8,7 @@ public class SourceGeneratorTests
     public void TestCborContext_Default_IsNotNull()
     {
         // Act
-        var context = TestCborContext.Default;
+        var context = TestCbOrContext.Default;
 
         // Assert
         context.Should().NotBeNull();
@@ -19,28 +19,28 @@ public class SourceGeneratorTests
     public void TestCborContext_HasExpectedTypeInfoProperties()
     {
         // Arrange
-        var context = TestCborContext.Default;
-        var contextType = typeof(TestCborContext);
+        var context = TestCbOrContext.Default;
+        var contextType = typeof(TestCbOrContext);
 
         // Act & Assert
         var simpleModelProperty = contextType.GetProperty("SimpleModel");
         simpleModelProperty.Should().NotBeNull();
-        simpleModelProperty!.PropertyType.Should().Be(typeof(CborTypeInfo<SimpleModel>));
+        simpleModelProperty!.PropertyType.Should().Be(typeof(CbOrTypeInfo<SimpleModel>));
 
         var modelWithAttributesProperty = contextType.GetProperty("ModelWithAttributes");
         modelWithAttributesProperty.Should().NotBeNull();
-        modelWithAttributesProperty!.PropertyType.Should().Be(typeof(CborTypeInfo<ModelWithAttributes>));
+        modelWithAttributesProperty!.PropertyType.Should().Be(typeof(CbOrTypeInfo<ModelWithAttributes>));
 
         var listProperty = contextType.GetProperty("ListOfSimpleModel");
         listProperty.Should().NotBeNull();
-        listProperty!.PropertyType.Should().Be(typeof(CborTypeInfo<List<SimpleModel>>));
+        listProperty!.PropertyType.Should().Be(typeof(CbOrTypeInfo<List<SimpleModel>>));
     }
 
     [Fact]
     public void TestCborContext_TypeInfoProperties_ReturnValidInstances()
     {
         // Arrange
-        var context = TestCborContext.Default;
+        var context = TestCbOrContext.Default;
 
         // Act & Assert
         context.SimpleModel.Should().NotBeNull();
@@ -53,7 +53,7 @@ public class SourceGeneratorTests
     public void TestCborContext_GetTypeInfo_ReturnsCorrectTypeInfo()
     {
         // Arrange
-        var context = TestCborContext.Default;
+        var context = TestCbOrContext.Default;
 
         // Act
         var simpleModelTypeInfo = context.GetTypeInfo<SimpleModel>();
@@ -71,7 +71,7 @@ public class SourceGeneratorTests
     public void TestCborContext_GetTypeInfo_UnsupportedType_ThrowsException()
     {
         // Arrange
-        var context = TestCborContext.Default;
+        var context = TestCbOrContext.Default;
 
         // Act & Assert
         var act = () => context.GetTypeInfo<DateTime>(); // DateTime not registered
@@ -83,7 +83,7 @@ public class SourceGeneratorTests
     public void GeneratedTypeInfo_Type_ReturnsCorrectType()
     {
         // Arrange
-        var context = TestCborContext.Default;
+        var context = TestCbOrContext.Default;
 
         // Act & Assert
         context.SimpleModel.Type.Should().Be(typeof(SimpleModel));
@@ -95,7 +95,7 @@ public class SourceGeneratorTests
     public void GeneratedCode_CanSerializeAndDeserialize()
     {
         // Arrange
-        var context = TestCborContext.Default;
+        var context = TestCbOrContext.Default;
         var model = new SimpleModel { Name = "Generated Test", Age = 99, IsActive = true };
 
         // Act
@@ -118,7 +118,7 @@ public class SourceGeneratorTests
     public void GeneratedCode_HandlesComplexTypes()
     {
         // Arrange
-        var context = TestCborContext.Default;
+        var context = TestCbOrContext.Default;
         var model = new NestedModel
         {
             Title = "Complex Test",
@@ -154,7 +154,7 @@ public class SourceGeneratorTests
     public void GeneratedTypeInfo_IsReusable()
     {
         // Arrange
-        var context = TestCborContext.Default;
+        var context = TestCbOrContext.Default;
         var model1 = new SimpleModel { Name = "First", Age = 1, IsActive = true };
         var model2 = new SimpleModel { Name = "Second", Age = 2, IsActive = false };
 

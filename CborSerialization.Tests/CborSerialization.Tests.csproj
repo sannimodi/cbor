@@ -20,8 +20,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\CborSerialization\CborSerialization.csproj" />
-    <Analyzer Include="..\CborSerialization.Generator\bin\Debug\netstandard2.0\CborSerialization.Generator.dll" />
+    <ProjectReference Include="..\CbOrSerialization\CbOrSerialization.csproj" />
+    <Analyzer Include="..\CbOrSerialization.Generator\bin\Debug\netstandard2.0\CbOrSerialization.Generator.dll" />
   </ItemGroup>
 
   <ItemGroup>

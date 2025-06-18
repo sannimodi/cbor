@@ -1,16 +1,16 @@
-namespace CborSerialization;
+namespace CbOrSerialization;
 
 /// <summary>
 /// Base class for CBOR serialization context that provides type information and serialization methods.
 /// </summary>
-public abstract class CborSerializerContext
+public abstract class CbOrSerializerContext
 {
-    private static readonly Dictionary<Type, CborSerializerContext> _defaultContexts = [];
+    private static readonly Dictionary<Type, CbOrSerializerContext> _defaultContexts = [];
 
     /// <summary>
     /// Gets the default instance of the context.
     /// </summary>
-    public static T Default<T>() where T : CborSerializerContext, new()
+    public static T Default<T>() where T : CbOrSerializerContext, new()
     {
         var type = typeof(T);
         if (!_defaultContexts.TryGetValue(type, out var context))
@@ -24,5 +24,5 @@ public abstract class CborSerializerContext
     /// <summary>
     /// Gets the type information for the specified type.
     /// </summary>
-    public abstract CborTypeInfo<T> GetTypeInfo<T>();
+    public abstract CbOrTypeInfo<T> GetTypeInfo<T>();
 } 

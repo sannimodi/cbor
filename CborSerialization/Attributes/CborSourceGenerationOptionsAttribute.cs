@@ -1,20 +1,20 @@
-namespace CborSerialization;
+namespace CbOrSerialization;
 
 /// <summary>
 /// Configures options for CBOR source generation.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
-public sealed class CborSourceGenerationOptionsAttribute : Attribute
+public sealed class CbOrSourceGenerationOptionsAttribute : Attribute
 {
     /// <summary>
     /// Gets or sets the property naming policy.
     /// </summary>
-    public CborKnownNamingPolicy PropertyNamingPolicy { get; set; }
+    public CbOrKnownNamingPolicy PropertyNamingPolicy { get; set; }
 
     /// <summary>
     /// Gets or sets the default ignore condition.
     /// </summary>
-    public CborIgnoreCondition DefaultIgnoreCondition { get; set; }
+    public CbOrIgnoreCondition DefaultIgnoreCondition { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum depth for serialization.
@@ -25,7 +25,7 @@ public sealed class CborSourceGenerationOptionsAttribute : Attribute
 /// <summary>
 /// Defines the available property naming policies.
 /// </summary>
-public enum CborKnownNamingPolicy
+public enum CbOrKnownNamingPolicy
 {
     /// <summary>
     /// No specific naming policy.
@@ -71,7 +71,7 @@ public enum CborKnownNamingPolicy
 /// <summary>
 /// Defines when a property should be ignored during serialization.
 /// </summary>
-public enum CborIgnoreCondition
+public enum CbOrIgnoreCondition
 {
     /// <summary>
     /// Always ignore the property.

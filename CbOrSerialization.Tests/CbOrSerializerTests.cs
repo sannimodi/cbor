@@ -214,3 +214,4 @@ public class CbOrSerializerTests
         deserialized.Name.Should().HaveLength(10000);
     }
 }
+

@@ -1,4 +1,4 @@
-﻿namespace CbOrSerialization.Demo;
+namespace CbOrSerialization.Demo;
 
 // Define a simple model
 public class Person
@@ -7,3 +7,4 @@ public class Person
     public int Age { get; set; }
     public bool IsActive { get; set; }
 }
+

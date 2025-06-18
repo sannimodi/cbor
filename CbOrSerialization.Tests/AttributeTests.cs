@@ -195,3 +195,4 @@ public class AttributeTests
         deserialized.Age.Should().Be(42);
     }
 }
+

@@ -181,3 +181,4 @@ public class SourceGeneratorTests
         deserialized2.Name.Should().Be("Second");
     }
 }
+

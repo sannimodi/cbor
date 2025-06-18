@@ -27,11 +27,11 @@
 - ✅ **CbOrSourceGenerationOptionsAttribute**: Configure generation options including naming policies
 
 #### Testing Infrastructure (Phase 2.1)
-- ✅ **Comprehensive Test Suite**: 47 tests, 0 failures
-  - ✅ **CbOrSerializerTests** (11 tests): Core serialization functionality
-  - ✅ **CbOrSerializerErrorTests** (8 tests): Error handling and edge cases
-  - ✅ **AttributeTests** (12 tests): Attribute functionality validation
-  - ✅ **SourceGeneratorTests** (16 tests): Generated code validation
+- ✅ **Comprehensive Test Suite**: 38 tests, 0 failures
+  - ✅ **CbOrSerializerTests** (9 tests): Core serialization functionality
+  - ✅ **CbOrSerializerErrorTests** (19 tests): Error handling and edge cases
+  - ✅ **AttributeTests** (9 tests): Attribute functionality validation
+  - ✅ **SourceGeneratorTests** (10 tests): Generated code validation
 
 #### Error Handling
 - ✅ **Enhanced CbOrSerializer**: Try-catch blocks with detailed error messages
@@ -221,7 +221,7 @@
 - **Type Support**: ⚠️ **60%** (6/10 type categories)
 - **Attribute System**: ✅ **80%** (4/5 core attributes)
 - **Error Handling**: ⚠️ **70%** (basic implementation, needs exception types)
-- **Testing**: ✅ **100%** (47 tests covering all implemented features)
+- **Testing**: ✅ **100%** (38 tests covering all implemented features)
 - **Documentation**: ✅ **90%** (comprehensive docs, needs API reference)
 
 ---

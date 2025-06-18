@@ -4,14 +4,14 @@
         {
             "label": "build",
             "type": "shell",
-            "command": "dotnet build SrcGenSample.sln",
+            "command": "dotnet build CbOrSerialization.sln",
             "group": "build",
             "problemMatcher": ["$msCompile"]
         },
         {
             "label": "run-demo",
             "type": "shell",
-            "command": "dotnet run --project GeneratorDemoApp",
+            "command": "dotnet run --project CbOrSerialization.Demo",
             "group": "test",
             "problemMatcher": []
         }

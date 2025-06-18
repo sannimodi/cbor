@@ -22,3 +22,4 @@ public abstract class CbOrTypeInfo<T>
     /// </summary>
     public abstract T Deserialize(CborReader reader);
 } 
+

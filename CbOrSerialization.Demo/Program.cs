@@ -1,4 +1,4 @@
-﻿// Create a sample person
+// Create a sample person
 using CbOrSerialization;
 using CbOrSerialization.Demo;
 
@@ -35,3 +35,4 @@ foreach (var p in deserializedPeople)
 {
     Console.WriteLine($"Name: {p.Name}, Age: {p.Age}, IsActive: {p.IsActive}");
 }
+

@@ -276,3 +276,4 @@ internal static class SerializationCodeGenerator
         };
     }
 } 
+

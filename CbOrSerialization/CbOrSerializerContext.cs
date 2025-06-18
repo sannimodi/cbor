@@ -26,3 +26,4 @@ public abstract class CbOrSerializerContext
     /// </summary>
     public abstract CbOrTypeInfo<T> GetTypeInfo<T>();
 } 
+

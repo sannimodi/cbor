@@ -307,3 +307,4 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         return typeSymbol.Name;
     }
 }
+

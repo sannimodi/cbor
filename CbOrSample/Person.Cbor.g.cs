@@ -35,3 +35,4 @@ public partial class Person
         return new Person { Name = name ?? string.Empty, Age = age };
     }
 }
+

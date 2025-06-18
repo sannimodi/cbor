@@ -20,3 +20,4 @@ public sealed class CbOrSerializableAttribute : Attribute
         Type = type ?? throw new ArgumentNullException(nameof(type));
     }
 } 
+

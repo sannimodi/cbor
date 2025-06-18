@@ -2,6 +2,8 @@
 
 A .NET library that provides CBOR (Concise Binary Object Representation) serialization using source generation, similar to System.Text.Json's approach. The library is fully AOT-compatible and leverages System.Formats.Cbor for the underlying CBOR operations.
 
+See the [specification document](CbOrSerializationSpec.md) for learning more about the design and features.
+
 ## Features
 
 - ✅ Source generation for AOT compatibility
@@ -13,7 +15,7 @@ A .NET library that provides CBOR (Concise Binary Object Representation) seriali
 - ✅ Trimming-friendly
 - ✅ Comprehensive test suite (47 tests)
 - ✅ Nullable type support
-- ✅ Custom attributes (CborPropertyName, CborIgnore, CborDefaultValue)
+- ✅ Custom attributes (CbOrPropertyName, CbOrIgnore, CbOrDefaultValue)
 
 ## Project Structure
 
@@ -194,7 +196,7 @@ This project is licensed under the terms of the LICENSE file.
 
 ## Roadmap
 
-See the [specification document](cbor_spec_enhanced.md) for planned features and future enhancements.
+See the [ROADMAP](roadmap.md) for planned features and future enhancements.
 
 ### Future Enhancements
 

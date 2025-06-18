@@ -13,10 +13,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CbOrSerialization.Demo", "C
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Context", "Context", "{6EEA4A9F-0FD7-C472-85FE-E9865E8415B8}"
 	ProjectSection(SolutionItems) = preProject
-		cbor_spec_enhanced.md = cbor_spec_enhanced.md
-		plan.md = plan.md
+		CbOrSerializationSpec.md = CbOrSerializationSpec.md
 		README.md = README.md
 		release.md = release.md
+		ROADMAP.md = ROADMAP.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CbOrSerialization.Tests", "CbOrSerialization.Tests\CbOrSerialization.Tests.csproj", "{61721D56-EA3E-4648-956F-46DABFB30D8C}"

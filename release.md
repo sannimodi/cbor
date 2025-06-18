@@ -88,7 +88,6 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 ### Key Components
 
 - **CborSourceGenerator**: The main generator class that implements `IIncrementalGenerator`.
-- **CborSyntaxReceiver**: Collects syntax nodes for processing.
 - **SerializationCodeGenerator**: Generates the serialization and deserialization code.
 
 ## Troubleshooting

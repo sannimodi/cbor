@@ -180,5 +180,28 @@ public class SourceGeneratorTests
         var deserialized2 = typeInfo.Deserialize(reader2);
         deserialized2.Name.Should().Be("Second");
     }
+
+    [Fact]
+    public void NamingPolicy_SnakeCaseLower_UsesSnakeCasePropertyNames()
+    {
+        var context = SnakeCaseContext.Default;
+        var model = new SimpleModel { Name = "CaseTest", Age = 5, IsActive = true };
+
+        var data = CbOrSerializer.Serialize(model, context.SimpleModel);
+        var reader = new System.Formats.Cbor.CborReader(data);
+        reader.ReadStartMap();
+        var names = new List<string>();
+        while (reader.PeekState() != System.Formats.Cbor.CborReaderState.EndMap)
+        {
+            names.Add(reader.ReadTextString());
+            reader.SkipValue();
+        }
+        reader.ReadEndMap();
+
+        names.Should().Contain("is_active");
+        names.Should().Contain("name");
+        names.Should().Contain("age");
+        names.Should().NotContain("IsActive");
+    }
 }
 

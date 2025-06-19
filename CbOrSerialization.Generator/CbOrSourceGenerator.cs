@@ -73,6 +73,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
     private static string GenerateContextSource(INamedTypeSymbol contextType, ImmutableArray<AttributeData> serializableAttributes)
     {
         var builder = new StringBuilder();
+        var namingPolicy = GetNamingPolicy(contextType);
         var namespaceName = contextType.ContainingNamespace.IsGlobalNamespace ? null : contextType.ContainingNamespace.ToDisplayString();
 
         // Add diagnostic comment
@@ -197,12 +198,12 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
             builder.AppendLine($"        public {propertyName}TypeInfo({contextType.Name} context) => _context = context;");
             builder.AppendLine($"        public override void Serialize(CborWriter writer, {typeName} value)");
             builder.AppendLine("        {");
-            builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol, "_context"));
+            builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol, namingPolicy, "_context"));
             builder.AppendLine("        }");
             builder.AppendLine();
             builder.AppendLine($"        public override {typeName} Deserialize(CborReader reader)");
             builder.AppendLine("        {");
-            builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol, "_context"));
+            builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol, namingPolicy, "_context"));
             builder.AppendLine("        }");
             builder.AppendLine("    }");
             builder.AppendLine();
@@ -305,6 +306,23 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         }
 
         return typeSymbol.Name;
+    }
+
+    private static CbOrKnownNamingPolicy GetNamingPolicy(INamedTypeSymbol contextType)
+    {
+        var attr = contextType.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "CbOrSerialization.CbOrSourceGenerationOptionsAttribute");
+
+        if (attr != null)
+        {
+            foreach (var arg in attr.NamedArguments)
+            {
+                if (arg.Key == "PropertyNamingPolicy" && arg.Value.Value is int val)
+                    return (CbOrKnownNamingPolicy)val;
+            }
+        }
+
+        return CbOrKnownNamingPolicy.Unspecified;
     }
 }
 

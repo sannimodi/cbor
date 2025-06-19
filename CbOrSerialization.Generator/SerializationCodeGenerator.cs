@@ -2,7 +2,7 @@ namespace CbOrSerialization.Generator;
 
 internal static class SerializationCodeGenerator
 {
-    public static string GenerateSerializationCode(INamedTypeSymbol typeSymbol, string contextRef = "this")
+    public static string GenerateSerializationCode(INamedTypeSymbol typeSymbol, CbOrKnownNamingPolicy namingPolicy, string contextRef = "this")
     {
         var builder = new StringBuilder();
         if (IsList(typeSymbol, out var elementType))
@@ -32,7 +32,7 @@ internal static class SerializationCodeGenerator
         builder.AppendLine("writer.WriteStartMap(null);");
         foreach (var property in properties)
         {
-            var propertyName = GetPropertyName(property);
+            var propertyName = GetPropertyName(property, namingPolicy);
             var propertyType = property.Type;
             builder.AppendLine($"writer.WriteTextString(\"{propertyName}\");");
             builder.AppendLine(GeneratePropertySerialization(property));
@@ -41,7 +41,7 @@ internal static class SerializationCodeGenerator
         return builder.ToString();
     }
 
-    public static string GenerateDeserializationCode(INamedTypeSymbol typeSymbol, string contextRef = "this")
+    public static string GenerateDeserializationCode(INamedTypeSymbol typeSymbol, CbOrKnownNamingPolicy namingPolicy, string contextRef = "this")
     {
         var builder = new StringBuilder();
         if (IsList(typeSymbol, out var elementType))
@@ -82,7 +82,7 @@ internal static class SerializationCodeGenerator
         builder.AppendLine("    {");
         foreach (var property in properties)
         {
-            var propertyName = GetPropertyName(property);
+            var propertyName = GetPropertyName(property, namingPolicy);
             builder.AppendLine($"        case \"{propertyName}\":");
             builder.AppendLine($"            result.{property.Name} = {GeneratePropertyDeserialization(property)};");
             builder.AppendLine("            break;");
@@ -111,7 +111,7 @@ internal static class SerializationCodeGenerator
             .Any(attr => attr.AttributeClass?.ToDisplayString() == "CbOrSerialization.CbOrIgnoreAttribute");
     }
 
-    private static string GetPropertyName(IPropertySymbol property)
+    private static string GetPropertyName(IPropertySymbol property, CbOrKnownNamingPolicy namingPolicy)
     {
         var nameAttr = property.GetAttributes()
             .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "CbOrSerialization.CbOrPropertyNameAttribute");
@@ -121,7 +121,7 @@ internal static class SerializationCodeGenerator
             return nameAttr.ConstructorArguments[0].Value?.ToString() ?? property.Name;
         }
 
-        return property.Name;
+        return ApplyNamingPolicy(property.Name, namingPolicy);
     }
 
     private static string GeneratePropertySerialization(IPropertySymbol property)
@@ -274,6 +274,45 @@ internal static class SerializationCodeGenerator
             SpecialType.System_UInt16 => "(ushort)reader.ReadUInt32()",
             _ => $"// TODO: Implement direct deserialization for {typeSymbol.ToDisplayString()}"
         };
+    }
+
+    private static string ApplyNamingPolicy(string name, CbOrKnownNamingPolicy policy)
+    {
+        return policy switch
+        {
+            CbOrKnownNamingPolicy.CamelCase => ToCamelCase(name),
+            CbOrKnownNamingPolicy.SnakeCaseLower => ToSnakeCase(name),
+            _ => name,
+        };
+    }
+
+    private static string ToCamelCase(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return name;
+        return char.ToLowerInvariant(name[0]) + name.Substring(1);
+    }
+
+    private static string ToSnakeCase(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return name;
+        var builder = new StringBuilder();
+        for (int i = 0; i < name.Length; i++)
+        {
+            char c = name[i];
+            if (char.IsUpper(c))
+            {
+                if (i > 0)
+                    builder.Append('_');
+                builder.Append(char.ToLowerInvariant(c));
+            }
+            else
+            {
+                builder.Append(c);
+            }
+        }
+        return builder.ToString();
     }
 } 
 

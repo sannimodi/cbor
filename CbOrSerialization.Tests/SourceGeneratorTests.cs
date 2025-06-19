@@ -180,5 +180,74 @@ public class SourceGeneratorTests
         var deserialized2 = typeInfo.Deserialize(reader2);
         deserialized2.Name.Should().Be("Second");
     }
+
+    [Fact]
+    public void NamingPolicy_SnakeCaseLower_UsesSnakeCasePropertyNames()
+    {
+        var context = SnakeCaseContext.Default;
+        var model = new SimpleModel { Name = "CaseTest", Age = 5, IsActive = true };
+
+        var names = SerializeAndGetNames(model, context.SimpleModel);
+
+        names.Should().Contain("is_active");
+        names.Should().Contain("name");
+        names.Should().Contain("age");
+        names.Should().NotContain("IsActive");
+    }
+
+    [Fact]
+    public void NamingPolicy_SnakeCaseUpper_UsesSnakeCaseUpperPropertyNames()
+    {
+        var context = SnakeCaseUpperContext.Default;
+        var names = SerializeAndGetNames(new SimpleModel(), context.SimpleModel);
+        names.Should().Contain("IS_ACTIVE");
+    }
+
+    [Fact]
+    public void NamingPolicy_KebabCaseLower_UsesKebabCaseLowerNames()
+    {
+        var context = KebabCaseLowerContext.Default;
+        var names = SerializeAndGetNames(new SimpleModel(), context.SimpleModel);
+        names.Should().Contain("is-active");
+    }
+
+    [Fact]
+    public void NamingPolicy_KebabCaseUpper_UsesKebabCaseUpperNames()
+    {
+        var context = KebabCaseUpperContext.Default;
+        var names = SerializeAndGetNames(new SimpleModel(), context.SimpleModel);
+        names.Should().Contain("IS-ACTIVE");
+    }
+
+    [Fact]
+    public void NamingPolicy_UpperCase_UsesUpperCaseNames()
+    {
+        var context = UpperCaseContext.Default;
+        var names = SerializeAndGetNames(new SimpleModel(), context.SimpleModel);
+        names.Should().Contain("ISACTIVE");
+    }
+
+    [Fact]
+    public void NamingPolicy_LowerCase_UsesLowerCaseNames()
+    {
+        var context = LowerCaseContext.Default;
+        var names = SerializeAndGetNames(new SimpleModel(), context.SimpleModel);
+        names.Should().Contain("isactive");
+    }
+
+    private static List<string> SerializeAndGetNames(SimpleModel model, CbOrTypeInfo<SimpleModel> typeInfo)
+    {
+        var data = CbOrSerializer.Serialize(model, typeInfo);
+        var reader = new System.Formats.Cbor.CborReader(data);
+        reader.ReadStartMap();
+        var names = new List<string>();
+        while (reader.PeekState() != System.Formats.Cbor.CborReaderState.EndMap)
+        {
+            names.Add(reader.ReadTextString());
+            reader.SkipValue();
+        }
+        reader.ReadEndMap();
+        return names;
+    }
 }
 

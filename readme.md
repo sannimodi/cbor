@@ -101,6 +101,18 @@ byte[] cborData = CborSerializer.Serialize(person, MyCborContext.Default.Person)
 Person? person = CborSerializer.Deserialize<Person>(cborData, MyCborContext.Default.Person);
 ```
 
+### Property Naming Policies
+
+The `CbOrSourceGenerationOptions` attribute supports several naming conventions:
+
+- `CamelCase` (default)
+- `SnakeCaseLower`
+- `SnakeCaseUpper`
+- `KebabCaseLower`
+- `KebabCaseUpper`
+- `UpperCase`
+- `LowerCase`
+
 ## Current Status
 
 - ✅ **Source generator successfully generates optimized serialization/deserialization code** for marked types

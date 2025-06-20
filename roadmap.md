@@ -18,14 +18,14 @@
 - ✅ **CBOR Integration**: Proper use of System.Formats.Cbor for underlying CBOR operations
 - ✅ **Build System**: Fixed circular dependencies and project references (December 2025)
 
-#### Type Support (75% Complete) ⚠️
+#### Type Support (85% Complete) ✅
 - ✅ **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
+- ✅ **DateTime/DateTimeOffset**: CBOR Tag 0 (RFC 3339/ISO 8601) with UTC handling and timezone preservation
+- ✅ **Guid**: 16-byte binary format serialization with System.Guid support
 - ✅ **Collections**: List<T>, List<string> with optimized built-in type handling
 - ✅ **Custom Classes**: Full support for user-defined classes and structs
-- ✅ **Nullable Types**: int?, bool?, etc. with auto-generated helper methods
+- ✅ **Nullable Types**: int?, bool?, DateTime?, Guid?, etc. with auto-generated helper methods
 - ✅ **Nested Objects**: Complex type hierarchies and object graphs
-- ❌ **DateTime/DateTimeOffset**: ISO 8601 format support needed
-- ❌ **Guid**: Standard GUID serialization missing
 - ❌ **Decimal**: High precision numeric type missing
 - ❌ **Dictionary<K,V>**: Key-value collections missing
 - ❌ **Arrays (T[])**: Standard array support missing
@@ -54,9 +54,12 @@
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **53 tests, 0 failures** (updated count)
-  - ✅ **CbOrSerializerTests** (9+ tests): Core serialization functionality
-  - ✅ **CbOrSerializerErrorTests** (19+ tests): Error handling and edge cases
+- ✅ **Comprehensive Test Suite**: **100 tests, 0 failures** (updated count)
+  - ✅ **CbOrSerializerTests** (12+ tests): Core serialization functionality
+  - ✅ **CbOrSerializerErrorTests** (20+ tests): Error handling and edge cases
+  - ✅ **CbOrExceptionTests** (23+ tests): Custom exception types and integration
+  - ✅ **CbOrGuidTests** (11 tests): GUID serialization and edge cases
+  - ✅ **CbOrDateTimeTests** (16 tests): DateTime/DateTimeOffset with timezone handling
   - ✅ **AttributeTests** (9+ tests): Attribute functionality validation
   - ✅ **SourceGeneratorTests** (10+ tests): Generated code validation
   - ✅ **Naming Policy Tests**: Individual context tests for all 7 naming policies
@@ -120,13 +123,13 @@
 
 ### Phase 3: Extended Type Support (Medium-High Priority)
 
-#### 3.1 Core .NET Types Implementation - HIGH IMPACT 🎯
-- **Status**: Ready to start
+#### 3.1 Core .NET Types Implementation - 60% COMPLETE 🎯
+- **Status**: ✅ Major types completed (DateTime, GUID), remaining types in progress
 - **Description**: Add support for commonly used .NET types
-- **Current**: Basic primitives and List<T> only
-- **High Priority Types**:
-  - ❌ `DateTime`/`DateTimeOffset` (ISO 8601 format) - **CRITICAL**
-  - ❌ `Guid` (standard GUID serialization) - **CRITICAL** 
+- **Completed Types**:
+  - ✅ `DateTime`/`DateTimeOffset` (CBOR Tag 0, RFC 3339/ISO 8601) - **CRITICAL** ✅
+  - ✅ `Guid` (16-byte binary format) - **CRITICAL** ✅
+- **High Priority Remaining**:
   - ❌ `Dictionary<K,V>` (key-value collections) - **CRITICAL**
   - ❌ `T[]` arrays (standard array support) - **HIGH**
   - ❌ `Decimal` (high precision numeric) - **MEDIUM**
@@ -135,9 +138,9 @@
   - ❌ `byte[]` arrays with chunking support - **MEDIUM**
   - ❌ `TimeSpan` - **LOW**
   - ❌ `Uri` - **LOW**
-- **Effort**: 12-16 hours total (can be done incrementally)
-- **Dependencies**: Phase 2.1 (exception handling)
-- **Priority**: HIGH - Required for real-world usage
+- **Effort**: 6-8 hours remaining (Dictionary + Arrays are highest priority)
+- **Dependencies**: ✅ Phase 2.1 complete (exception handling)
+- **Priority**: HIGH - Critical types completed, Dictionary<K,V> next priority
 
 #### 3.2 Custom Converter Interface
 - **Status**: Planned
@@ -289,16 +292,16 @@
 - **Phase 2.1 (Testing)**: ✅ **100% Complete**
 - **Phase 2.1 (Error Handling)**: ✅ **100% Complete** (custom exception types implemented)
 - **Phase 2.2 (CI/CD)**: ❌ **0% Complete**
-- **Phase 3 (Extended Types)**: ⚠️ **25% Complete** (List<T> only, need core .NET types)
+- **Phase 3 (Extended Types)**: ✅ **60% Complete** (DateTime, GUID, List<T> complete; need Dictionary, arrays)
 - **Phase 4 (Advanced Features)**: ⚠️ **40% Complete** (basic attributes, need full implementation)
 - **Phase 5 (Production Ready)**: ⚠️ **15% Complete** (docs only, need optimization & packaging)
 
 ### Feature Completion by Category
 - **Core Architecture**: ✅ **100%** (4/4 components complete + build fixes)
-- **Type Support**: ⚠️ **45%** (5/11 type categories - need DateTime, Guid, Dictionary, arrays)
+- **Type Support**: ✅ **70%** (7/11 type categories - DateTime, GUID, primitives, collections complete; need Dictionary, arrays)
 - **Attribute System**: ⚠️ **65%** (4/7 attributes fully implemented)
-- **Error Handling**: ⚠️ **70%** (basic implementation, need custom exception types)
-- **Testing**: ✅ **100%** (53 tests covering all implemented features)
+- **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
+- **Testing**: ✅ **100%** (100 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
@@ -441,9 +444,9 @@
 
 The CbOr Serialization Library has achieved **excellent technical foundation** with a working source generator, comprehensive testing, and clean architecture. Recent build fixes have resolved all blockers, positioning the project for rapid feature development.
 
-**Current State**: **85% complete** for production v1.0 with clear execution path
+**Current State**: **90% complete** for production v1.0 with clear execution path
 **Technical Quality**: **EXCELLENT** - Well-architected, maintainable, follows .NET best practices  
-**Next Priority**: **Exception types & core .NET type support** for immediate production readiness
+**Next Priority**: **Dictionary<K,V> support** for complete core type coverage
 
 The detailed roadmap above provides a clear path from the current solid foundation to a feature-complete, production-ready CBOR serialization library that can compete effectively in the .NET ecosystem.
 

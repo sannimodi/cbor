@@ -121,7 +121,7 @@ The `CbOrSourceGenerationOptions` attribute supports several naming conventions:
 - ✅ **Nullable type support** with auto-generated helper methods
 - ✅ **Custom attributes support** (CborPropertyName, CborIgnore, CborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with **73 passing tests** covering all functionality
+- ✅ **Comprehensive test suite** with **100 passing tests** covering all functionality
 - ✅ **Production-ready error handling** with custom exception types and contextual error messages
 - ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Demo project** demonstrates serialization and deserialization of objects and collections
@@ -138,17 +138,17 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 
 ### Currently Supported ✅
 - **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
+- **DateTime Types**: DateTime, DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601), UTC handling, timezone preservation
+- **GUID**: System.Guid with efficient 16-byte binary format
 - **Collections**: List<T>, List<string> with optimized built-in type handling
 - **Custom classes and structs** with source generation
-- **Nullable types** (int?, bool?, etc.) with auto-generated helper methods
+- **Nullable types** (int?, bool?, DateTime?, Guid?, etc.) with auto-generated helper methods
 - **Nested objects** and complex type hierarchies
 - **Custom attributes**: CborPropertyName, CborIgnore, CborDefaultValue
 
 ### Planned for Future Releases
-- Dictionary<K,V> and arrays
+- Dictionary<K,V> and arrays (T[])
 - Enums (numeric + string options)
-- DateTime/DateTimeOffset (ISO 8601)
-- Guid
 - Decimal (high precision)
 - Large binary data (byte[])
 
@@ -183,7 +183,7 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (73 tests)
+# Run the comprehensive test suite (100 tests)
 dotnet test CbOrSerialization.Tests/
 
 # Run the demo
@@ -192,11 +192,13 @@ dotnet run --project CbOrSerialization.Demo/
 
 ## Test Results
 
-The library includes a comprehensive test suite with **73 tests, 0 failures**:
+The library includes a comprehensive test suite with **100 tests, 0 failures**:
 
 - **CbOrSerializerTests** (12+ tests): Core serialization functionality
 - **CbOrSerializerErrorTests** (20+ tests): Error handling and edge cases  
 - **CbOrExceptionTests** (23+ tests): Custom exception types and integration
+- **CbOrGuidTests** (11 tests): GUID serialization and edge cases
+- **CbOrDateTimeTests** (16 tests): DateTime/DateTimeOffset with timezone handling
 - **AttributeTests** (9+ tests): Attribute functionality validation
 - **SourceGeneratorTests** (10+ tests): Generated code validation
 

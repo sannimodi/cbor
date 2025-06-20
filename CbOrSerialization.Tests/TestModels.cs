@@ -70,6 +70,17 @@ public class ComplexDictionaryModel
     public Dictionary<string, Dictionary<string, int>> NestedDictionaries { get; set; } = new();
 }
 
+public class DecimalModel
+{
+    public decimal Value { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal? OptionalValue { get; set; }
+    public decimal Zero { get; set; }
+    public decimal Large { get; set; }
+    public decimal Small { get; set; }
+    public decimal Negative { get; set; }
+}
+
 public class AllTypesModel
 {
     // Primitives
@@ -95,6 +106,7 @@ public class AllTypesModel
 [CbOrSerializable(typeof(SimpleModel))]
 [CbOrSerializable(typeof(GuidModel))]
 [CbOrSerializable(typeof(DateTimeModel))]
+//[CbOrSerializable(typeof(DecimalModel))]  // Temporarily commented out to debug
 [CbOrSerializable(typeof(ModelWithAttributes))]
 [CbOrSerializable(typeof(NestedModel))]
 [CbOrSerializable(typeof(DictionaryModel))]

@@ -335,6 +335,11 @@ internal static class SerializationCodeGenerator
             return "DateTimeOffset";
         }
         
+        if (displayString == "System.Decimal")
+        {
+            return "Decimal";
+        }
+        
         return typeSymbol.Name;
     }
 
@@ -364,7 +369,8 @@ internal static class SerializationCodeGenerator
         var displayString = typeSymbol.ToDisplayString();
         return displayString == "System.Guid" ||
                displayString == "System.DateTime" ||
-               displayString == "System.DateTimeOffset";
+               displayString == "System.DateTimeOffset" ||
+               displayString == "System.Decimal";
     }
 
     private static string GenerateDirectSerialization(string variableName, ITypeSymbol typeSymbol)
@@ -404,6 +410,11 @@ internal static class SerializationCodeGenerator
         if (displayString == "System.DateTimeOffset")
         {
             return $"writer.WriteTag(System.Formats.Cbor.CborTag.DateTimeString); writer.WriteTextString({variableName}.ToString(\"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture));"; 
+        }
+        
+        if (displayString == "System.Decimal")
+        {
+            return $"writer.WriteDecimal({variableName});";
         }
         
         return $"// TODO: Implement direct serialization for {typeSymbol.ToDisplayString()}";
@@ -446,6 +457,11 @@ internal static class SerializationCodeGenerator
         if (displayString == "System.DateTimeOffset")
         {
             return "System.DateTimeOffset.ParseExact(reader.ReadTag() == System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)";
+        }
+        
+        if (displayString == "System.Decimal")
+        {
+            return "reader.ReadDecimal()";
         }
         
         return $"// TODO: Implement direct deserialization for {typeSymbol.ToDisplayString()}";

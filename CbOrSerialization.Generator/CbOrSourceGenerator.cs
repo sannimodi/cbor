@@ -250,6 +250,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
             ("SByte", "ReadInt32"),
             ("Int16", "ReadInt32"),
             ("UInt16", "ReadUInt32"),
+            ("Decimal", "ReadDecimal"),
             ("Guid", "ReadByteString"),
             ("DateTime", "ReadTextString"),
             ("DateTimeOffset", "ReadTextString")

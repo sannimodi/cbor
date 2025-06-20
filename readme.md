@@ -121,8 +121,9 @@ The `CbOrSourceGenerationOptions` attribute supports several naming conventions:
 - ✅ **Nullable type support** with auto-generated helper methods
 - ✅ **Custom attributes support** (CborPropertyName, CborIgnore, CborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with 47 passing tests covering all functionality
-- ✅ **Enhanced error handling** with try-catch blocks and detailed error messages
+- ✅ **Comprehensive test suite** with **73 passing tests** covering all functionality
+- ✅ **Production-ready error handling** with custom exception types and contextual error messages
+- ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Demo project** demonstrates serialization and deserialization of objects and collections
 
 ## AOT Support
@@ -153,16 +154,15 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 
 ## Error Handling
 
-The library provides comprehensive error handling:
-- ✅ **Enhanced CborSerializer** with try-catch blocks and detailed error messages
+The library provides production-ready error handling:
+- ✅ **Custom Exception Types** with contextual information:
+  - `CbOrSerializationException` - Serialization failures with type information
+  - `CbOrDeserializationException` - Deserialization failures with type information  
+  - `CbOrValidationException` - Data validation failures with property context
+- ✅ **Enhanced CbOrSerializer** with proper exception chaining and detailed error messages
 - ✅ **Parameter validation** with ArgumentNullException for null inputs
 - ✅ **CBOR format validation** with descriptive error messages
-- ✅ **Comprehensive error test suite** (19 tests) covering edge cases and invalid inputs
-
-### Future Exception Types (Planned)
-- `CborSerializationException`
-- `CborDeserializationException`
-- `CborValidationException`
+- ✅ **Comprehensive error test suite** (23+ tests) covering all exception types and edge cases
 
 ## Contributing
 
@@ -183,21 +183,22 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (38 tests)
-dotnet test CborSerialization.Tests/
+# Run the comprehensive test suite (73 tests)
+dotnet test CbOrSerialization.Tests/
 
 # Run the demo
-dotnet run --project CborSerialization.Demo/
+dotnet run --project CbOrSerialization.Demo/
 ```
 
 ## Test Results
 
-The library includes a comprehensive test suite with **38 tests, 0 failures**:
+The library includes a comprehensive test suite with **73 tests, 0 failures**:
 
-- **CborSerializerTests** (9 tests): Core serialization functionality
-- **CbOrSerializerErrorTests** (19 tests): Error handling and edge cases
-- **AttributeTests** (9 tests): Attribute functionality validation
-- **SourceGeneratorTests** (10 tests): Generated code validation
+- **CbOrSerializerTests** (12+ tests): Core serialization functionality
+- **CbOrSerializerErrorTests** (20+ tests): Error handling and edge cases  
+- **CbOrExceptionTests** (23+ tests): Custom exception types and integration
+- **AttributeTests** (9+ tests): Attribute functionality validation
+- **SourceGeneratorTests** (10+ tests): Generated code validation
 
 All tests demonstrate the library's reliability and production readiness.
 

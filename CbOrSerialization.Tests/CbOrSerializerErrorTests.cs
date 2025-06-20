@@ -38,28 +38,27 @@ public class CbOrSerializerErrorTests
     }
 
     [Fact]
-    public void Deserialize_EmptyData_ThrowsArgumentException()
+    public void Deserialize_EmptyData_ThrowsCbOrValidationException()
     {
         // Arrange
         var emptyData = Array.Empty<byte>();
 
         // Act & Assert
         var act = () => CbOrSerializer.Deserialize(emptyData, _context.SimpleModel);
-        act.Should().Throw<ArgumentException>()
-           .WithParameterName("data")
-           .WithMessage("CBOR data cannot be empty.*");
+        act.Should().Throw<CbOrValidationException>()
+           .WithMessage("*CBOR data cannot be empty*");
     }
 
     [Fact]
-    public void Deserialize_InvalidCbOrData_ThrowsFormatException()
+    public void Deserialize_InvalidCbOrData_ThrowsCbOrDeserializationException()
     {
         // Arrange
-        var invalidData = new byte[] { 0xFF, 0xFE, 0xFD }; // Invalid CBOR
+        var invalidData = new byte[] { 0xFF, 0xFE, 0xFD }; // Invalid CBOR structure
 
         // Act & Assert
         var act = () => CbOrSerializer.Deserialize(invalidData, _context.SimpleModel);
-        act.Should().Throw<Exception>()
-           .And.Message.Should().Contain("type SimpleModel");
+        act.Should().Throw<CbOrDeserializationException>()
+           .WithMessage("*Failed to deserialize to type 'SimpleModel'*");
     }
 
     [Fact]

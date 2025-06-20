@@ -250,7 +250,9 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
             ("SByte", "ReadInt32"),
             ("Int16", "ReadInt32"),
             ("UInt16", "ReadUInt32"),
-            ("Guid", "ReadByteString")
+            ("Guid", "ReadByteString"),
+            ("DateTime", "ReadTextString"),
+            ("DateTimeOffset", "ReadTextString")
         };
 
         foreach (var (typeName, readerMethod) in primitiveTypes)
@@ -275,6 +277,14 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
             if (typeName == "Guid")
             {
                 builder.AppendLine("        return new System.Guid(reader.ReadByteString());");
+            }
+            else if (typeName == "DateTime")
+            {
+                builder.AppendLine("        return System.DateTime.ParseExact(reader.ReadTag() == System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);");
+            }
+            else if (typeName == "DateTimeOffset")
+            {
+                builder.AppendLine("        return System.DateTimeOffset.ParseExact(reader.ReadTag() == System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);");
             }
             else
             {

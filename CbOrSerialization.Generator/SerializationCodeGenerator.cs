@@ -217,10 +217,21 @@ internal static class SerializationCodeGenerator
         
         if (specialTypeName != null) return specialTypeName;
         
-        // Handle System.Guid
-        if (typeSymbol.ToDisplayString() == "System.Guid")
+        // Handle other built-in types
+        var displayString = typeSymbol.ToDisplayString();
+        if (displayString == "System.Guid")
         {
             return "Guid";
+        }
+        
+        if (displayString == "System.DateTime")
+        {
+            return "DateTime";
+        }
+        
+        if (displayString == "System.DateTimeOffset")
+        {
+            return "DateTimeOffset";
         }
         
         return typeSymbol.Name;
@@ -248,8 +259,11 @@ internal static class SerializationCodeGenerator
         
         if (isSpecialType) return true;
         
-        // Handle System.Guid (not a SpecialType)
-        return typeSymbol.ToDisplayString() == "System.Guid";
+        // Handle other built-in types (not SpecialTypes)
+        var displayString = typeSymbol.ToDisplayString();
+        return displayString == "System.Guid" ||
+               displayString == "System.DateTime" ||
+               displayString == "System.DateTimeOffset";
     }
 
     private static string GenerateDirectSerialization(string variableName, ITypeSymbol typeSymbol)
@@ -274,10 +288,21 @@ internal static class SerializationCodeGenerator
         
         if (result != null) return result;
         
-        // Handle System.Guid
-        if (typeSymbol.ToDisplayString() == "System.Guid")
+        // Handle other built-in types
+        var displayString = typeSymbol.ToDisplayString();
+        if (displayString == "System.Guid")
         {
             return $"writer.WriteByteString({variableName}.ToByteArray());"; 
+        }
+        
+        if (displayString == "System.DateTime")
+        {
+            return $"writer.WriteTag(System.Formats.Cbor.CborTag.DateTimeString); writer.WriteTextString(({variableName}.Kind == System.DateTimeKind.Unspecified ? System.DateTime.SpecifyKind({variableName}, System.DateTimeKind.Utc) : {variableName}).ToUniversalTime().ToString(\"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture));"; 
+        }
+        
+        if (displayString == "System.DateTimeOffset")
+        {
+            return $"writer.WriteTag(System.Formats.Cbor.CborTag.DateTimeString); writer.WriteTextString({variableName}.ToString(\"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture));"; 
         }
         
         return $"// TODO: Implement direct serialization for {typeSymbol.ToDisplayString()}";
@@ -305,10 +330,21 @@ internal static class SerializationCodeGenerator
         
         if (result != null) return result;
         
-        // Handle System.Guid
-        if (typeSymbol.ToDisplayString() == "System.Guid")
+        // Handle other built-in types
+        var displayString = typeSymbol.ToDisplayString();
+        if (displayString == "System.Guid")
         {
             return "new System.Guid(reader.ReadByteString())";
+        }
+        
+        if (displayString == "System.DateTime")
+        {
+            return "System.DateTime.ParseExact(reader.ReadTag() == System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)";
+        }
+        
+        if (displayString == "System.DateTimeOffset")
+        {
+            return "System.DateTimeOffset.ParseExact(reader.ReadTag() == System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)";
         }
         
         return $"// TODO: Implement direct deserialization for {typeSymbol.ToDisplayString()}";

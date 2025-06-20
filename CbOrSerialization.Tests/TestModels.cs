@@ -17,6 +17,15 @@ public class GuidModel
     public Guid? OptionalId { get; set; }
 }
 
+public class DateTimeModel
+{
+    public DateTime CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public DateTime? OptionalDate { get; set; }
+    public DateTimeOffset? OptionalDateOffset { get; set; }
+}
+
 public class ModelWithAttributes
 {
     [CbOrPropertyName("full_name")]
@@ -62,6 +71,7 @@ public class AllTypesModel
 // Test context for source generator
 [CbOrSerializable(typeof(SimpleModel))]
 [CbOrSerializable(typeof(GuidModel))]
+[CbOrSerializable(typeof(DateTimeModel))]
 [CbOrSerializable(typeof(ModelWithAttributes))]
 [CbOrSerializable(typeof(NestedModel))]
 [CbOrSerializable(typeof(AllTypesModel))]

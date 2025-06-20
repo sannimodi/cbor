@@ -128,7 +128,7 @@ public class AttributeTests
     public void CbOrSerializable_NonRegisteredType_ThrowsException()
     {
         // Act & Assert
-        var act = _context.GetTypeInfo<Dictionary<string, int>>; // Not registered
+        var act = _context.GetTypeInfo<Dictionary<int, int>>; // Not registered
         act.Should().Throw<ArgumentException>()
            .WithMessage("*not registered for serialization*");
     }

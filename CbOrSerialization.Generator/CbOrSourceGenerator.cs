@@ -159,6 +159,12 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
+            // Skip built-in types and nullable built-in types - they don't need context properties
+            if (IsBuiltInType(typeSymbol) || IsNullableBuiltInType(typeSymbol))
+            {
+                continue;
+            }
+
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var propertyName = GetPropertyNameFromType(typeSymbol);
             builder.AppendLine($"    public CbOrTypeInfo<{typeName}> {propertyName} {{ get; }}");
@@ -182,6 +188,12 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
                 continue;
             }
 
+            // Skip built-in types and nullable built-in types - they don't need context properties
+            if (IsBuiltInType(typeSymbol) || IsNullableBuiltInType(typeSymbol))
+            {
+                continue;
+            }
+
             var propertyName = GetPropertyNameFromType(typeSymbol);
             builder.AppendLine($"        {propertyName} = new {propertyName}TypeInfo(this);");
         }
@@ -199,6 +211,12 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
             var typeArg = args[0];
 
             if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            {
+                continue;
+            }
+
+            // Skip built-in types and nullable built-in types - they don't need context properties
+            if (IsBuiltInType(typeSymbol) || IsNullableBuiltInType(typeSymbol))
             {
                 continue;
             }
@@ -338,16 +356,92 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
             name += "Of" + string.Join("And", namedType.TypeArguments.Select(GetPropertyNameFromType));
             return name;
         }
-        else if (typeSymbol is INamedTypeSymbol namedType2)
+        
+        // Handle built-in types specially - they don't need context references
+        var specialTypeName = typeSymbol.SpecialType switch
         {
-            var name = namedType2.Name;
-            int backtickIndex = name.IndexOf('`');
-            if (backtickIndex >= 0)
-                name = name.Substring(0, backtickIndex);
-            return name;
+            SpecialType.System_String => "String",
+            SpecialType.System_Int32 => "Int32", 
+            SpecialType.System_Boolean => "Boolean",
+            SpecialType.System_Double => "Double",
+            SpecialType.System_Single => "Single",
+            SpecialType.System_Int64 => "Int64",
+            SpecialType.System_UInt32 => "UInt32",
+            SpecialType.System_UInt64 => "UInt64",
+            SpecialType.System_Byte => "Byte",
+            SpecialType.System_SByte => "SByte",
+            SpecialType.System_Int16 => "Int16",
+            SpecialType.System_UInt16 => "UInt16",
+            _ => null
+        };
+        
+        if (specialTypeName != null) return specialTypeName;
+        
+        // Handle other built-in types
+        var displayString = typeSymbol.ToDisplayString();
+        if (displayString == "System.Guid")
+        {
+            return "Guid";
         }
-
+        
+        if (displayString == "System.DateTime")
+        {
+            return "DateTime";
+        }
+        
+        if (displayString == "System.DateTimeOffset")
+        {
+            return "DateTimeOffset";
+        }
+        
+        if (displayString == "System.Decimal" || displayString == "decimal")
+        {
+            return "Decimal";
+        }
+        
         return typeSymbol.Name;
+    }
+
+    private static bool IsBuiltInType(ITypeSymbol typeSymbol)
+    {
+        // Handle special types
+        var isSpecialType = typeSymbol.SpecialType switch
+        {
+            SpecialType.System_String => true,
+            SpecialType.System_Int32 => true,
+            SpecialType.System_Boolean => true,
+            SpecialType.System_Double => true,
+            SpecialType.System_Single => true,
+            SpecialType.System_Int64 => true,
+            SpecialType.System_UInt32 => true,
+            SpecialType.System_UInt64 => true,
+            SpecialType.System_Byte => true,
+            SpecialType.System_SByte => true,
+            SpecialType.System_Int16 => true,
+            SpecialType.System_UInt16 => true,
+            _ => false
+        };
+        
+        if (isSpecialType) return true;
+        
+        // Handle other built-in types (not SpecialTypes)
+        var displayString = typeSymbol.ToDisplayString();
+        return displayString == "System.Guid" ||
+               displayString == "System.DateTime" ||
+               displayString == "System.DateTimeOffset" ||
+               displayString == "System.Decimal" ||
+               displayString == "decimal";
+    }
+
+    private static bool IsNullableBuiltInType(ITypeSymbol typeSymbol)
+    {
+        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType && 
+            namedType.Name == "Nullable" && namedType.TypeArguments.Length == 1)
+        {
+            var underlyingType = namedType.TypeArguments[0];
+            return IsBuiltInType(underlyingType);
+        }
+        return false;
     }
 
     private static CbOrKnownNamingPolicy GetNamingPolicy(INamedTypeSymbol contextType)

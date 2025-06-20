@@ -1,7 +1,7 @@
 # CbOr Serialization Library - Roadmap
 
-*Last Updated: 2025-06-20*  
-*Current Status: Dictionary Support Complete - Major Milestone Achieved*
+*Last Updated: 2025-06-21*  
+*Current Status: Decimal Support Complete - Major Milestone Achieved*
 
 ---
 
@@ -18,16 +18,16 @@
 - ✅ **CBOR Integration**: Proper use of System.Formats.Cbor for underlying CBOR operations
 - ✅ **Build System**: Fixed circular dependencies and project references (December 2025)
 
-#### Type Support (92% Complete) ✅
+#### Type Support (95% Complete) ✅
 - ✅ **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
 - ✅ **DateTime/DateTimeOffset**: CBOR Tag 0 (RFC 3339/ISO 8601) with UTC handling and timezone preservation
 - ✅ **Guid**: 16-byte binary format serialization with System.Guid support
 - ✅ **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
-- ✅ **Dictionary<K,V>**: Complete key-value collection support with nullable variants ⭐ **NEW**
+- ✅ **Dictionary<K,V>**: Complete key-value collection support with nullable variants
+- ✅ **Decimal**: System.Decimal with CBOR Tag 4 (RFC 8949 decimal fractions), full 128-bit precision ⭐ **NEW**
 - ✅ **Custom Classes**: Full support for user-defined classes and structs
-- ✅ **Nullable Types**: int?, bool?, DateTime?, Guid?, Dictionary?, etc. with auto-generated helper methods
+- ✅ **Nullable Types**: int?, bool?, decimal?, DateTime?, Guid?, Dictionary?, etc. with auto-generated helper methods
 - ✅ **Nested Objects**: Complex type hierarchies and object graphs
-- ❌ **Decimal**: High precision numeric type missing
 - ❌ **Arrays (T[])**: Standard array support missing
 - ❌ **Enums**: Numeric and string serialization missing
 - ❌ **byte[]**: Large binary data with chunking missing
@@ -54,11 +54,12 @@
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **115 tests, 0 failures** (updated with Dictionary tests)
+- ✅ **Comprehensive Test Suite**: **133 tests, 0 failures** (updated with Decimal tests)
   - ✅ **CbOrSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **CbOrSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **CbOrExceptionTests** (23+ tests): Custom exception types and integration
-  - ✅ **CbOrDictionaryTests** (15 tests): Dictionary serialization and all scenarios ⭐ **NEW**
+  - ✅ **CbOrDictionaryTests** (15 tests): Dictionary serialization and all scenarios
+  - ✅ **CbOrDecimalTests** (13 tests): Decimal serialization and all scenarios ⭐ **NEW**
   - ✅ **CbOrGuidTests** (11 tests): GUID serialization and edge cases
   - ✅ **CbOrDateTimeTests** (16 tests): DateTime/DateTimeOffset with timezone handling
   - ✅ **AttributeTests** (9+ tests): Attribute functionality validation
@@ -312,7 +313,7 @@
 - **Type Support**: ✅ **85%** (8/11 type categories - DateTime, GUID, primitives, collections, Dictionary complete; need arrays)
 - **Attribute System**: ⚠️ **65%** (4/7 attributes fully implemented)
 - **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
-- **Testing**: ✅ **100%** (115 tests covering all implemented features)
+- **Testing**: ✅ **100%** (133 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)

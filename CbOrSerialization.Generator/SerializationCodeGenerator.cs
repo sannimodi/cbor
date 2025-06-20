@@ -335,7 +335,7 @@ internal static class SerializationCodeGenerator
             return "DateTimeOffset";
         }
         
-        if (displayString == "System.Decimal")
+        if (displayString == "System.Decimal" || displayString == "decimal")
         {
             return "Decimal";
         }
@@ -370,7 +370,8 @@ internal static class SerializationCodeGenerator
         return displayString == "System.Guid" ||
                displayString == "System.DateTime" ||
                displayString == "System.DateTimeOffset" ||
-               displayString == "System.Decimal";
+               displayString == "System.Decimal" ||
+               displayString == "decimal";
     }
 
     private static string GenerateDirectSerialization(string variableName, ITypeSymbol typeSymbol)
@@ -412,7 +413,7 @@ internal static class SerializationCodeGenerator
             return $"writer.WriteTag(System.Formats.Cbor.CborTag.DateTimeString); writer.WriteTextString({variableName}.ToString(\"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture));"; 
         }
         
-        if (displayString == "System.Decimal")
+        if (displayString == "System.Decimal" || displayString == "decimal")
         {
             return $"writer.WriteDecimal({variableName});";
         }
@@ -459,7 +460,7 @@ internal static class SerializationCodeGenerator
             return "System.DateTimeOffset.ParseExact(reader.ReadTag() == System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)";
         }
         
-        if (displayString == "System.Decimal")
+        if (displayString == "System.Decimal" || displayString == "decimal")
         {
             return "reader.ReadDecimal()";
         }

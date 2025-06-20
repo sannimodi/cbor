@@ -13,7 +13,7 @@ See the [specification document](CbOrSerializationSpec.md) for learning more abo
 - ✅ Efficient binary serialization
 - ✅ Native AOT support
 - ✅ Trimming-friendly
-- ✅ Comprehensive test suite (38 tests)
+- ✅ Comprehensive test suite (115 tests)
 - ✅ Nullable type support
 - ✅ Custom attributes (CbOrPropertyName, CbOrIgnore, CbOrDefaultValue)
 
@@ -30,9 +30,10 @@ See the [specification document](CbOrSerializationSpec.md) for learning more abo
 │   ├── CborSourceGenerator.cs      # Incremental source generator
 │   └── SerializationCodeGenerator.cs # Code generation logic
 │
-├── CborSerialization.Tests/       # Comprehensive test suite (38 tests)
+├── CborSerialization.Tests/       # Comprehensive test suite (115 tests)
 │   ├── CborSerializerTests.cs      # Core serialization tests
 │   ├── CborSerializerErrorTests.cs # Error handling tests
+│   ├── CbOrDictionaryTests.cs      # Dictionary serialization tests
 │   ├── AttributeTests.cs           # Attribute functionality tests
 │   ├── SourceGeneratorTests.cs     # Generator validation tests
 │   └── TestModels.cs               # Test model definitions
@@ -117,11 +118,11 @@ The `CbOrSourceGenerationOptions` attribute supports several naming conventions:
 
 - ✅ **Source generator successfully generates optimized serialization/deserialization code** for marked types
 - ✅ **Full primitive type support** (string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long)
-- ✅ **Collection support** (List<T>, List<string>) with optimized built-in type handling
+- ✅ **Collection support** (List<T>, Dictionary<K,V>) with optimized built-in type handling
 - ✅ **Nullable type support** with auto-generated helper methods
 - ✅ **Custom attributes support** (CborPropertyName, CborIgnore, CborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with **100 passing tests** covering all functionality
+- ✅ **Comprehensive test suite** with **115 passing tests** covering all functionality
 - ✅ **Production-ready error handling** with custom exception types and contextual error messages
 - ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Demo project** demonstrates serialization and deserialization of objects and collections
@@ -140,14 +141,14 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 - **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
 - **DateTime Types**: DateTime, DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601), UTC handling, timezone preservation
 - **GUID**: System.Guid with efficient 16-byte binary format
-- **Collections**: List<T>, List<string> with optimized built-in type handling
+- **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
 - **Custom classes and structs** with source generation
 - **Nullable types** (int?, bool?, DateTime?, Guid?, etc.) with auto-generated helper methods
 - **Nested objects** and complex type hierarchies
 - **Custom attributes**: CborPropertyName, CborIgnore, CborDefaultValue
 
 ### Planned for Future Releases
-- Dictionary<K,V> and arrays (T[])
+- Arrays (T[])
 - Enums (numeric + string options)
 - Decimal (high precision)
 - Large binary data (byte[])
@@ -183,7 +184,7 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (100 tests)
+# Run the comprehensive test suite (115 tests)
 dotnet test CbOrSerialization.Tests/
 
 # Run the demo
@@ -192,11 +193,12 @@ dotnet run --project CbOrSerialization.Demo/
 
 ## Test Results
 
-The library includes a comprehensive test suite with **100 tests, 0 failures**:
+The library includes a comprehensive test suite with **115 tests, 0 failures**:
 
 - **CbOrSerializerTests** (12+ tests): Core serialization functionality
 - **CbOrSerializerErrorTests** (20+ tests): Error handling and edge cases  
 - **CbOrExceptionTests** (23+ tests): Custom exception types and integration
+- **CbOrDictionaryTests** (15 tests): Dictionary serialization and all scenarios
 - **CbOrGuidTests** (11 tests): GUID serialization and edge cases
 - **CbOrDateTimeTests** (16 tests): DateTime/DateTimeOffset with timezone handling
 - **AttributeTests** (9+ tests): Attribute functionality validation

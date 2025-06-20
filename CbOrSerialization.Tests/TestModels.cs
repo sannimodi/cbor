@@ -47,6 +47,29 @@ public class NestedModel
     public List<string> Tags { get; set; } = new();
 }
 
+public class DictionaryModel
+{
+    public Dictionary<string, string> StringToString { get; set; } = new();
+    public Dictionary<string, int> StringToInt { get; set; } = new();
+    public Dictionary<int, string> IntToString { get; set; } = new();
+    public Dictionary<string, bool> StringToBool { get; set; } = new();
+    public Dictionary<Guid, string> GuidToString { get; set; } = new();
+}
+
+public class NullableDictionaryModel
+{
+    public Dictionary<string, string>? OptionalStringDict { get; set; }
+    public Dictionary<string, int>? OptionalIntDict { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
+public class ComplexDictionaryModel
+{
+    public Dictionary<string, SimpleModel> StringToModel { get; set; } = new();
+    public Dictionary<string, List<string>> StringToList { get; set; } = new();
+    public Dictionary<string, Dictionary<string, int>> NestedDictionaries { get; set; } = new();
+}
+
 public class AllTypesModel
 {
     // Primitives
@@ -74,9 +97,20 @@ public class AllTypesModel
 [CbOrSerializable(typeof(DateTimeModel))]
 [CbOrSerializable(typeof(ModelWithAttributes))]
 [CbOrSerializable(typeof(NestedModel))]
+[CbOrSerializable(typeof(DictionaryModel))]
+[CbOrSerializable(typeof(NullableDictionaryModel))]
+[CbOrSerializable(typeof(ComplexDictionaryModel))]
 [CbOrSerializable(typeof(AllTypesModel))]
 [CbOrSerializable(typeof(List<SimpleModel>))]
 [CbOrSerializable(typeof(List<string>))]
+[CbOrSerializable(typeof(Dictionary<string, string>))]
+[CbOrSerializable(typeof(Dictionary<string, int>))]
+[CbOrSerializable(typeof(Dictionary<int, string>))]
+[CbOrSerializable(typeof(Dictionary<string, bool>))]
+[CbOrSerializable(typeof(Dictionary<Guid, string>))]
+[CbOrSerializable(typeof(Dictionary<string, SimpleModel>))]
+[CbOrSerializable(typeof(Dictionary<string, List<string>>))]
+[CbOrSerializable(typeof(Dictionary<string, Dictionary<string, int>>))]
 public partial class TestCbOrContext : CbOrSerializerContext
 {
 }

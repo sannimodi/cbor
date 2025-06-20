@@ -28,6 +28,41 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("writer.WriteEndArray();");
             return builder.ToString();
         }
+        if (IsDictionary(typeSymbol, out var keyType, out var valueType))
+        {
+            if (keyType == null || valueType == null)
+                throw new InvalidOperationException("Key and value types cannot be null for a valid dictionary type.");
+                
+            builder.AppendLine("writer.WriteStartMap(value.Count);");
+            builder.AppendLine($"foreach (var kvp in value)");
+            builder.AppendLine("{");
+            
+            // Serialize key
+            builder.AppendLine("    // Serialize key");
+            if (IsBuiltInType(keyType))
+            {
+                builder.AppendLine($"    {GenerateDirectSerialization("kvp.Key", keyType)}");
+            }
+            else
+            {
+                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(keyType)}.Serialize(writer, kvp.Key);");
+            }
+            
+            // Serialize value
+            builder.AppendLine("    // Serialize value");
+            if (IsBuiltInType(valueType))
+            {
+                builder.AppendLine($"    {GenerateDirectSerialization("kvp.Value", valueType)}");
+            }
+            else
+            {
+                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(valueType)}.Serialize(writer, kvp.Value);");
+            }
+            
+            builder.AppendLine("}");
+            builder.AppendLine("writer.WriteEndMap();");
+            return builder.ToString();
+        }
         var properties = GetSerializableProperties(typeSymbol);
         builder.AppendLine("writer.WriteStartMap(null);");
         foreach (var property in properties)
@@ -70,6 +105,46 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("}");
             builder.AppendLine("reader.ReadEndArray();");
             builder.AppendLine("return list;");
+            return builder.ToString();
+        }
+        if (IsDictionary(typeSymbol, out var keyType, out var valueType))
+        {
+            if (keyType == null || valueType == null)
+                throw new InvalidOperationException("Key and value types cannot be null for a valid dictionary type.");
+                
+            builder.AppendLine($"var dictionary = new System.Collections.Generic.Dictionary<{keyType.ToDisplayString()}, {valueType.ToDisplayString()}>();");
+            builder.AppendLine("int? mapSize = reader.ReadStartMap();");
+            builder.AppendLine("for (int i = 0; mapSize == null || i < mapSize; i++)");
+            builder.AppendLine("{");
+            builder.AppendLine("    if (mapSize == null && reader.PeekState() == CborReaderState.EndMap)");
+            builder.AppendLine("        break;");
+            
+            // Deserialize key
+            builder.AppendLine("    // Deserialize key");
+            if (IsBuiltInType(keyType))
+            {
+                builder.AppendLine($"    var key = {GenerateDirectDeserialization(keyType)};");
+            }
+            else
+            {
+                builder.AppendLine($"    var key = {contextRef}.{GetPropertyNameFromType(keyType)}.Deserialize(reader);");
+            }
+            
+            // Deserialize value
+            builder.AppendLine("    // Deserialize value");
+            if (IsBuiltInType(valueType))
+            {
+                builder.AppendLine($"    var value = {GenerateDirectDeserialization(valueType)};");
+            }
+            else
+            {
+                builder.AppendLine($"    var value = {contextRef}.{GetPropertyNameFromType(valueType)}.Deserialize(reader);");
+            }
+            
+            builder.AppendLine("    dictionary.Add(key, value);");
+            builder.AppendLine("}");
+            builder.AppendLine("reader.ReadEndMap();");
+            builder.AppendLine("return dictionary;");
             return builder.ToString();
         }
         var properties = GetSerializableProperties(typeSymbol);
@@ -145,6 +220,12 @@ internal static class SerializationCodeGenerator
             }
         }
         
+        // Handle nullable reference types (like Dictionary<string, string>?)
+        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
+        {
+            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}); }} else {{ writer.WriteNull(); }}";
+        }
+        
         // Handle complex types via context reference
         return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name});";
     }
@@ -170,6 +251,13 @@ internal static class SerializationCodeGenerator
             }
         }
         
+        // Handle nullable reference types (like Dictionary<string, string>?)
+        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
+        {
+            var nonNullableType = type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated);
+            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader)";
+        }
+        
         // Handle complex types via context reference
         return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader)";
     }
@@ -180,6 +268,19 @@ internal static class SerializationCodeGenerator
         if (typeSymbol is { IsGenericType: true } && typeSymbol.Name == "List" && typeSymbol.TypeArguments.Length == 1)
         {
             elementType = typeSymbol.TypeArguments[0];
+            return true;
+        }
+        return false;
+    }
+
+    private static bool IsDictionary(INamedTypeSymbol typeSymbol, out ITypeSymbol? keyType, out ITypeSymbol? valueType)
+    {
+        keyType = null;
+        valueType = null;
+        if (typeSymbol is { IsGenericType: true } && typeSymbol.Name == "Dictionary" && typeSymbol.TypeArguments.Length == 2)
+        {
+            keyType = typeSymbol.TypeArguments[0];
+            valueType = typeSymbol.TypeArguments[1];
             return true;
         }
         return false;

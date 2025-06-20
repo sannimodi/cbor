@@ -294,6 +294,14 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
             builder.AppendLine("    }");
             builder.AppendLine();
         }
+
+        // Add helper method for reading null values
+        builder.AppendLine("    private static T? ReadNullValue<T>(CborReader reader) where T : class");
+        builder.AppendLine("    {");
+        builder.AppendLine("        reader.ReadNull();");
+        builder.AppendLine("        return null;");
+        builder.AppendLine("    }");
+        builder.AppendLine();
     }
 
     private static string GetPropertyName(INamedTypeSymbol typeSymbol)

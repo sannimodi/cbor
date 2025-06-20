@@ -10,6 +10,13 @@ public class SimpleModel
     public bool IsActive { get; set; }
 }
 
+public class GuidModel
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public Guid? OptionalId { get; set; }
+}
+
 public class ModelWithAttributes
 {
     [CbOrPropertyName("full_name")]
@@ -54,6 +61,7 @@ public class AllTypesModel
 
 // Test context for source generator
 [CbOrSerializable(typeof(SimpleModel))]
+[CbOrSerializable(typeof(GuidModel))]
 [CbOrSerializable(typeof(ModelWithAttributes))]
 [CbOrSerializable(typeof(NestedModel))]
 [CbOrSerializable(typeof(AllTypesModel))]

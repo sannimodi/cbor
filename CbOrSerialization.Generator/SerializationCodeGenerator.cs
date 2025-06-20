@@ -198,7 +198,7 @@ internal static class SerializationCodeGenerator
         }
         
         // Handle built-in types specially - they don't need context references
-        return typeSymbol.SpecialType switch
+        var specialTypeName = typeSymbol.SpecialType switch
         {
             SpecialType.System_String => "String",
             SpecialType.System_Int32 => "Int32", 
@@ -212,13 +212,24 @@ internal static class SerializationCodeGenerator
             SpecialType.System_SByte => "SByte",
             SpecialType.System_Int16 => "Int16",
             SpecialType.System_UInt16 => "UInt16",
-            _ => typeSymbol.Name
+            _ => null
         };
+        
+        if (specialTypeName != null) return specialTypeName;
+        
+        // Handle System.Guid
+        if (typeSymbol.ToDisplayString() == "System.Guid")
+        {
+            return "Guid";
+        }
+        
+        return typeSymbol.Name;
     }
 
     private static bool IsBuiltInType(ITypeSymbol typeSymbol)
     {
-        return typeSymbol.SpecialType switch
+        // Handle special types
+        var isSpecialType = typeSymbol.SpecialType switch
         {
             SpecialType.System_String => true,
             SpecialType.System_Int32 => true,
@@ -234,11 +245,17 @@ internal static class SerializationCodeGenerator
             SpecialType.System_UInt16 => true,
             _ => false
         };
+        
+        if (isSpecialType) return true;
+        
+        // Handle System.Guid (not a SpecialType)
+        return typeSymbol.ToDisplayString() == "System.Guid";
     }
 
     private static string GenerateDirectSerialization(string variableName, ITypeSymbol typeSymbol)
     {
-        return typeSymbol.SpecialType switch
+        // Handle special types
+        var result = typeSymbol.SpecialType switch
         {
             SpecialType.System_String => $"writer.WriteTextString({variableName});",
             SpecialType.System_Int32 => $"writer.WriteInt32({variableName});",
@@ -252,13 +269,24 @@ internal static class SerializationCodeGenerator
             SpecialType.System_SByte => $"writer.WriteInt32({variableName});",
             SpecialType.System_Int16 => $"writer.WriteInt32({variableName});",
             SpecialType.System_UInt16 => $"writer.WriteUInt32({variableName});",
-            _ => $"// TODO: Implement direct serialization for {typeSymbol.ToDisplayString()}"
+            _ => null
         };
+        
+        if (result != null) return result;
+        
+        // Handle System.Guid
+        if (typeSymbol.ToDisplayString() == "System.Guid")
+        {
+            return $"writer.WriteByteString({variableName}.ToByteArray());"; 
+        }
+        
+        return $"// TODO: Implement direct serialization for {typeSymbol.ToDisplayString()}";
     }
 
     private static string GenerateDirectDeserialization(ITypeSymbol typeSymbol)
     {
-        return typeSymbol.SpecialType switch
+        // Handle special types
+        var result = typeSymbol.SpecialType switch
         {
             SpecialType.System_String => "reader.ReadTextString()",
             SpecialType.System_Int32 => "reader.ReadInt32()",
@@ -272,8 +300,18 @@ internal static class SerializationCodeGenerator
             SpecialType.System_SByte => "(sbyte)reader.ReadInt32()",
             SpecialType.System_Int16 => "(short)reader.ReadInt32()",
             SpecialType.System_UInt16 => "(ushort)reader.ReadUInt32()",
-            _ => $"// TODO: Implement direct deserialization for {typeSymbol.ToDisplayString()}"
+            _ => null
         };
+        
+        if (result != null) return result;
+        
+        // Handle System.Guid
+        if (typeSymbol.ToDisplayString() == "System.Guid")
+        {
+            return "new System.Guid(reader.ReadByteString())";
+        }
+        
+        return $"// TODO: Implement direct deserialization for {typeSymbol.ToDisplayString()}";
     }
 
     private static string ApplyNamingPolicy(string name, CbOrKnownNamingPolicy policy)

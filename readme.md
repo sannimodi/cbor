@@ -13,7 +13,7 @@ See the [specification document](CbOrSerializationSpec.md) for learning more abo
 - ✅ Efficient binary serialization
 - ✅ Native AOT support
 - ✅ Trimming-friendly
-- ✅ Comprehensive test suite (115 tests)
+- ✅ Comprehensive test suite (133 tests)
 - ✅ Nullable type support
 - ✅ Custom attributes (CbOrPropertyName, CbOrIgnore, CbOrDefaultValue)
 
@@ -30,10 +30,11 @@ See the [specification document](CbOrSerializationSpec.md) for learning more abo
 │   ├── CborSourceGenerator.cs      # Incremental source generator
 │   └── SerializationCodeGenerator.cs # Code generation logic
 │
-├── CborSerialization.Tests/       # Comprehensive test suite (115 tests)
+├── CborSerialization.Tests/       # Comprehensive test suite (133 tests)
 │   ├── CborSerializerTests.cs      # Core serialization tests
 │   ├── CborSerializerErrorTests.cs # Error handling tests
 │   ├── CbOrDictionaryTests.cs      # Dictionary serialization tests
+│   ├── CbOrDecimalTests.cs         # Decimal serialization tests
 │   ├── AttributeTests.cs           # Attribute functionality tests
 │   ├── SourceGeneratorTests.cs     # Generator validation tests
 │   └── TestModels.cs               # Test model definitions
@@ -122,7 +123,7 @@ The `CbOrSourceGenerationOptions` attribute supports several naming conventions:
 - ✅ **Nullable type support** with auto-generated helper methods
 - ✅ **Custom attributes support** (CborPropertyName, CborIgnore, CborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with **115 passing tests** covering all functionality
+- ✅ **Comprehensive test suite** with **133 passing tests** covering all functionality
 - ✅ **Production-ready error handling** with custom exception types and contextual error messages
 - ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Demo project** demonstrates serialization and deserialization of objects and collections
@@ -139,18 +140,18 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 
 ### Currently Supported ✅
 - **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
+- **Decimal**: System.Decimal with CBOR Tag 4 (RFC 8949 decimal fractions), full 128-bit precision
 - **DateTime Types**: DateTime, DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601), UTC handling, timezone preservation
 - **GUID**: System.Guid with efficient 16-byte binary format
 - **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
 - **Custom classes and structs** with source generation
-- **Nullable types** (int?, bool?, DateTime?, Guid?, etc.) with auto-generated helper methods
+- **Nullable types** (int?, bool?, decimal?, DateTime?, Guid?, etc.) with auto-generated helper methods
 - **Nested objects** and complex type hierarchies
 - **Custom attributes**: CborPropertyName, CborIgnore, CborDefaultValue
 
 ### Planned for Future Releases
 - Arrays (T[])
 - Enums (numeric + string options)
-- Decimal (high precision)
 - Large binary data (byte[])
 
 ## Error Handling

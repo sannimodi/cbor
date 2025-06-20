@@ -281,7 +281,12 @@ internal static class SerializationCodeGenerator
         return policy switch
         {
             CbOrKnownNamingPolicy.CamelCase => ToCamelCase(name),
-            CbOrKnownNamingPolicy.SnakeCaseLower => ToSnakeCase(name),
+            CbOrKnownNamingPolicy.SnakeCaseLower => ToSnakeCase(name, upper: false),
+            CbOrKnownNamingPolicy.SnakeCaseUpper => ToSnakeCase(name, upper: true),
+            CbOrKnownNamingPolicy.KebabCaseLower => ToKebabCase(name, upper: false),
+            CbOrKnownNamingPolicy.KebabCaseUpper => ToKebabCase(name, upper: true),
+            CbOrKnownNamingPolicy.UpperCase => name.ToUpperInvariant(),
+            CbOrKnownNamingPolicy.LowerCase => name.ToLowerInvariant(),
             _ => name,
         };
     }
@@ -293,7 +298,19 @@ internal static class SerializationCodeGenerator
         return char.ToLowerInvariant(name[0]) + name.Substring(1);
     }
 
-    private static string ToSnakeCase(string name)
+    private static string ToSnakeCase(string name, bool upper)
+    {
+        var separated = ToSeparatedCase(name, '_');
+        return upper ? separated.ToUpperInvariant() : separated.ToLowerInvariant();
+    }
+
+    private static string ToKebabCase(string name, bool upper)
+    {
+        var separated = ToSeparatedCase(name, '-');
+        return upper ? separated.ToUpperInvariant() : separated.ToLowerInvariant();
+    }
+
+    private static string ToSeparatedCase(string name, char delimiter)
     {
         if (string.IsNullOrEmpty(name))
             return name;
@@ -304,8 +321,8 @@ internal static class SerializationCodeGenerator
             if (char.IsUpper(c))
             {
                 if (i > 0)
-                    builder.Append('_');
-                builder.Append(char.ToLowerInvariant(c));
+                    builder.Append(delimiter);
+                builder.Append(c);
             }
             else
             {

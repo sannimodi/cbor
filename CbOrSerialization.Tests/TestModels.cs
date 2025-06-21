@@ -133,6 +133,55 @@ public class MixedArrayModel
     public SimpleModel[]? OptionalModels { get; set; }
 }
 
+// Enum test models
+public enum UserRole
+{
+    Guest = 0,
+    User = 1,
+    Admin = 2,
+    SuperAdmin = 3
+}
+
+public enum Priority
+{
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    Critical = 4
+}
+
+[Flags]
+public enum Permissions
+{
+    None = 0,
+    Read = 1,
+    Write = 2,
+    Execute = 4,
+    Delete = 8,
+    All = Read | Write | Execute | Delete
+}
+
+public enum Status : byte
+{
+    Inactive = 0,
+    Active = 1,
+    Pending = 2,
+    Suspended = 3
+}
+
+public class EnumModel
+{
+    public UserRole Role { get; set; }
+    public UserRole? OptionalRole { get; set; }
+    public Priority TaskPriority { get; set; }
+    public Priority? OptionalPriority { get; set; }
+    public Permissions UserPermissions { get; set; }
+    public Permissions? OptionalPermissions { get; set; }
+    public Status CurrentStatus { get; set; }
+    public Status? OptionalStatus { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
 // Test context for source generator
 [CbOrSerializable(typeof(SimpleModel))]
 [CbOrSerializable(typeof(GuidModel))]
@@ -148,6 +197,7 @@ public class MixedArrayModel
 [CbOrSerializable(typeof(ArrayModel))]
 [CbOrSerializable(typeof(NullableArrayModel))]
 [CbOrSerializable(typeof(MixedArrayModel))]
+[CbOrSerializable(typeof(EnumModel))]
 [CbOrSerializable(typeof(List<SimpleModel>))]
 [CbOrSerializable(typeof(List<string>))]
 [CbOrSerializable(typeof(Dictionary<string, string>))]

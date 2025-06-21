@@ -321,6 +321,14 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         builder.AppendLine("        return null;");
         builder.AppendLine("    }");
         builder.AppendLine();
+        
+        // Add helper method for reading null enum values
+        builder.AppendLine("    private static T? ReadNullEnum<T>(CborReader reader) where T : struct, System.Enum");
+        builder.AppendLine("    {");
+        builder.AppendLine("        reader.ReadNull();");
+        builder.AppendLine("        return null;");
+        builder.AppendLine("    }");
+        builder.AppendLine();
     }
 
     private static string GetPropertyName(ITypeSymbol typeSymbol)
@@ -419,6 +427,12 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         };
         
         if (isSpecialType) return true;
+        
+        // Handle enums - they serialize as their underlying type
+        if (typeSymbol.TypeKind == TypeKind.Enum)
+        {
+            return true;
+        }
         
         // Handle other built-in types (not SpecialTypes)
         var displayString = typeSymbol.ToDisplayString();

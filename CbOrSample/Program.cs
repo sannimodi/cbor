@@ -2,6 +2,77 @@ using System.Formats.Cbor;
 
 Console.WriteLine("=== Comprehensive CBOR Serialization Test ===");
 
+// === ENUM TESTING ===
+Console.WriteLine("\n=== Enum Serialization Testing ===");
+
+// Create enum test model with various enum scenarios
+var enumModel = new EnumTestModel
+{
+    Name = "EnumTest",
+    Role = UserRole.Admin,
+    OptionalRole = UserRole.SuperAdmin,
+    TaskPriority = Priority.High,
+    OptionalPriority = Priority.Critical,
+    UserPermissions = Permissions.Read | Permissions.Write | Permissions.Execute,
+    OptionalPermissions = Permissions.All,
+    CurrentStatus = Status.Active,
+    OptionalStatus = Status.Pending
+};
+
+// Test numeric enum serialization
+Console.WriteLine("Testing numeric enum serialization...");
+var enumWriter = new CborWriter();
+EnumTestModel.Serialize(enumWriter, enumModel, useStringEnums: false);
+var numericEnumBytes = enumWriter.Encode();
+Console.WriteLine($"Numeric enum CBOR size: {numericEnumBytes.Length} bytes");
+
+// Test numeric enum deserialization
+var enumReader = new CborReader(numericEnumBytes);
+var deserializedNumericEnum = EnumTestModel.Deserialize(enumReader, useStringEnums: false);
+Console.WriteLine($"Numeric enum round-trip successful: {deserializedNumericEnum.Role == enumModel.Role}");
+Console.WriteLine($"  Role: {deserializedNumericEnum.Role} (expected: {enumModel.Role})");
+Console.WriteLine($"  Permissions: {deserializedNumericEnum.UserPermissions} (expected: {enumModel.UserPermissions})");
+
+// Test string enum serialization  
+Console.WriteLine("\nTesting string enum serialization...");
+enumWriter = new CborWriter();
+EnumTestModel.Serialize(enumWriter, enumModel, useStringEnums: true);
+var stringEnumBytes = enumWriter.Encode();
+Console.WriteLine($"String enum CBOR size: {stringEnumBytes.Length} bytes");
+
+// Test string enum deserialization
+enumReader = new CborReader(stringEnumBytes);
+var deserializedStringEnum = EnumTestModel.Deserialize(enumReader, useStringEnums: true);
+Console.WriteLine($"String enum round-trip successful: {deserializedStringEnum.Role == enumModel.Role}");
+Console.WriteLine($"  Role: {deserializedStringEnum.Role} (expected: {enumModel.Role})");
+Console.WriteLine($"  Permissions: {deserializedStringEnum.UserPermissions} (expected: {enumModel.UserPermissions})");
+
+// Test nullable enum scenarios
+var nullableEnumModel = new EnumTestModel
+{
+    Name = "NullableEnumTest",
+    Role = UserRole.User,
+    OptionalRole = null, // Test null enum
+    TaskPriority = Priority.Low,
+    OptionalPriority = null, // Test null enum
+    UserPermissions = Permissions.Read,
+    OptionalPermissions = null, // Test null flags enum
+    CurrentStatus = Status.Inactive,
+    OptionalStatus = null // Test null byte enum
+};
+
+Console.WriteLine("\nTesting nullable enum serialization...");
+enumWriter = new CborWriter();
+EnumTestModel.Serialize(enumWriter, nullableEnumModel, useStringEnums: false);
+var nullableEnumBytes = enumWriter.Encode();
+enumReader = new CborReader(nullableEnumBytes);
+var deserializedNullableEnum = EnumTestModel.Deserialize(enumReader, useStringEnums: false);
+Console.WriteLine($"Nullable enum round-trip successful: {deserializedNullableEnum.OptionalRole == null}");
+Console.WriteLine($"  OptionalRole is null: {deserializedNullableEnum.OptionalRole == null} (expected: true)");
+Console.WriteLine($"  OptionalPermissions is null: {deserializedNullableEnum.OptionalPermissions == null} (expected: true)");
+
+Console.WriteLine("=== Enum Testing Complete ===\n");
+
 // Create a comprehensive Person object with all data types
 var person = new Person
 {

@@ -337,6 +337,12 @@ internal static class SerializationCodeGenerator
             var underlyingType = namedType.TypeArguments[0];
             if (IsBuiltInType(underlyingType))
             {
+                // For enums, use inline null checking instead of helper methods
+                if (underlyingType.TypeKind == TypeKind.Enum)
+                {
+                    var enumDeserialization = GenerateDirectDeserialization(underlyingType);
+                    return $"reader.PeekState() == CborReaderState.Null ? ReadNullEnum<{underlyingType.ToDisplayString()}>(reader) : {enumDeserialization}";
+                }
                 return $"ReadNullable{underlyingType.Name}(reader)";
             }
         }
@@ -472,6 +478,12 @@ internal static class SerializationCodeGenerator
         
         if (isSpecialType) return true;
         
+        // Handle enums - they serialize as their underlying type
+        if (typeSymbol.TypeKind == TypeKind.Enum)
+        {
+            return true;
+        }
+        
         // Handle other built-in types (not SpecialTypes)
         var displayString = typeSymbol.ToDisplayString();
         return displayString == "System.Guid" ||
@@ -525,6 +537,31 @@ internal static class SerializationCodeGenerator
             return $"writer.WriteDecimal({variableName});";
         }
         
+        // Handle enums - serialize as their underlying numeric value
+        if (typeSymbol.TypeKind == TypeKind.Enum)
+        {
+            if (typeSymbol is INamedTypeSymbol namedEnum)
+            {
+                var underlyingType = namedEnum.EnumUnderlyingType;
+                if (underlyingType != null)
+                {
+                    return underlyingType.SpecialType switch
+                    {
+                        SpecialType.System_Byte => $"writer.WriteUInt32((uint)(byte){variableName});",
+                        SpecialType.System_SByte => $"writer.WriteInt32((int)(sbyte){variableName});",
+                        SpecialType.System_Int16 => $"writer.WriteInt32((int)(short){variableName});",
+                        SpecialType.System_UInt16 => $"writer.WriteUInt32((uint)(ushort){variableName});",
+                        SpecialType.System_Int32 => $"writer.WriteInt32((int){variableName});",
+                        SpecialType.System_UInt32 => $"writer.WriteUInt32((uint){variableName});",
+                        SpecialType.System_Int64 => $"writer.WriteInt64((long){variableName});",
+                        SpecialType.System_UInt64 => $"writer.WriteUInt64((ulong){variableName});",
+                        _ => $"writer.WriteInt32((int){variableName});" // Default to int
+                    };
+                }
+            }
+            return $"writer.WriteInt32((int){variableName});"; // Fallback
+        }
+        
         return $"// TODO: Implement direct serialization for {typeSymbol.ToDisplayString()}";
     }
 
@@ -570,6 +607,32 @@ internal static class SerializationCodeGenerator
         if (displayString == "System.Decimal" || displayString == "decimal")
         {
             return "reader.ReadDecimal()";
+        }
+        
+        // Handle enums - deserialize from their underlying numeric value
+        if (typeSymbol.TypeKind == TypeKind.Enum)
+        {
+            if (typeSymbol is INamedTypeSymbol namedEnum)
+            {
+                var underlyingType = namedEnum.EnumUnderlyingType;
+                var enumTypeName = typeSymbol.ToDisplayString();
+                if (underlyingType != null)
+                {
+                    return underlyingType.SpecialType switch
+                    {
+                        SpecialType.System_Byte => $"({enumTypeName})(byte)reader.ReadUInt32()",
+                        SpecialType.System_SByte => $"({enumTypeName})(sbyte)reader.ReadInt32()",
+                        SpecialType.System_Int16 => $"({enumTypeName})(short)reader.ReadInt32()",
+                        SpecialType.System_UInt16 => $"({enumTypeName})(ushort)reader.ReadUInt32()",
+                        SpecialType.System_Int32 => $"({enumTypeName})reader.ReadInt32()",
+                        SpecialType.System_UInt32 => $"({enumTypeName})reader.ReadUInt32()",
+                        SpecialType.System_Int64 => $"({enumTypeName})reader.ReadInt64()",
+                        SpecialType.System_UInt64 => $"({enumTypeName})reader.ReadUInt64()",
+                        _ => $"({enumTypeName})reader.ReadInt32()" // Default to int
+                    };
+                }
+            }
+            return $"({typeSymbol.ToDisplayString()})reader.ReadInt32()"; // Fallback
         }
         
         return $"// TODO: Implement direct deserialization for {typeSymbol.ToDisplayString()}";

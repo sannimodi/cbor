@@ -33,10 +33,17 @@ public partial class Person
     public Guid PersonId { get; set; }
     public Guid? SessionId { get; set; }
 
-    // Collections
+    // Collections (Lists)
     public List<string> Tags { get; set; } = new();
     public List<int> Scores { get; set; } = new();
     public List<string>? OptionalNotes { get; set; }
+    
+    // Arrays
+    public string[] Skills { get; set; } = Array.Empty<string>();
+    public int[] TestScores { get; set; } = Array.Empty<int>();
+    public double[] Measurements { get; set; } = Array.Empty<double>();
+    public string[]? OptionalTags { get; set; }
+    public Address[]? PreviousAddresses { get; set; }
 
     // Dictionaries
     public Dictionary<string, string> Metadata { get; set; } = new();
@@ -177,6 +184,61 @@ public partial class Person
             foreach (var note in person.OptionalNotes)
             {
                 writer.WriteTextString(note);
+            }
+            writer.WriteEndArray();
+        }
+        else
+        {
+            writer.WriteNull();
+        }
+        
+        // Arrays
+        writer.WriteTextString("Skills");
+        writer.WriteStartArray(person.Skills.Length);
+        foreach (var skill in person.Skills)
+        {
+            writer.WriteTextString(skill);
+        }
+        writer.WriteEndArray();
+        
+        writer.WriteTextString("TestScores");
+        writer.WriteStartArray(person.TestScores.Length);
+        foreach (var score in person.TestScores)
+        {
+            writer.WriteInt32(score);
+        }
+        writer.WriteEndArray();
+        
+        writer.WriteTextString("Measurements");
+        writer.WriteStartArray(person.Measurements.Length);
+        foreach (var measurement in person.Measurements)
+        {
+            writer.WriteDouble(measurement);
+        }
+        writer.WriteEndArray();
+        
+        writer.WriteTextString("OptionalTags");
+        if (person.OptionalTags != null)
+        {
+            writer.WriteStartArray(person.OptionalTags.Length);
+            foreach (var tag in person.OptionalTags)
+            {
+                writer.WriteTextString(tag);
+            }
+            writer.WriteEndArray();
+        }
+        else
+        {
+            writer.WriteNull();
+        }
+        
+        writer.WriteTextString("PreviousAddresses");
+        if (person.PreviousAddresses != null)
+        {
+            writer.WriteStartArray(person.PreviousAddresses.Length);
+            foreach (var address in person.PreviousAddresses)
+            {
+                Address.Serialize(writer, address);
             }
             writer.WriteEndArray();
         }
@@ -459,6 +521,79 @@ public partial class Person
                         }
                         reader.ReadEndArray();
                         person.OptionalNotes = notes;
+                    }
+                    break;
+                
+                // Arrays
+                case "Skills":
+                    var skillsList = new List<string>();
+                    int? skillsArraySize = reader.ReadStartArray();
+                    for (int i = 0; skillsArraySize == null || i < skillsArraySize; i++)
+                    {
+                        if (skillsArraySize == null && reader.PeekState() == CborReaderState.EndArray) break;
+                        skillsList.Add(reader.ReadTextString());
+                    }
+                    reader.ReadEndArray();
+                    person.Skills = skillsList.ToArray();
+                    break;
+                case "TestScores":
+                    var testScoresList = new List<int>();
+                    int? testScoresArraySize = reader.ReadStartArray();
+                    for (int i = 0; testScoresArraySize == null || i < testScoresArraySize; i++)
+                    {
+                        if (testScoresArraySize == null && reader.PeekState() == CborReaderState.EndArray) break;
+                        testScoresList.Add(reader.ReadInt32());
+                    }
+                    reader.ReadEndArray();
+                    person.TestScores = testScoresList.ToArray();
+                    break;
+                case "Measurements":
+                    var measurementsList = new List<double>();
+                    int? measurementsArraySize = reader.ReadStartArray();
+                    for (int i = 0; measurementsArraySize == null || i < measurementsArraySize; i++)
+                    {
+                        if (measurementsArraySize == null && reader.PeekState() == CborReaderState.EndArray) break;
+                        measurementsList.Add(reader.ReadDouble());
+                    }
+                    reader.ReadEndArray();
+                    person.Measurements = measurementsList.ToArray();
+                    break;
+                case "OptionalTags":
+                    if (reader.PeekState() == CborReaderState.Null)
+                    {
+                        reader.ReadNull();
+                        person.OptionalTags = null;
+                    }
+                    else
+                    {
+                        var optionalTagsList = new List<string>();
+                        int? optionalTagsArraySize = reader.ReadStartArray();
+                        for (int i = 0; optionalTagsArraySize == null || i < optionalTagsArraySize; i++)
+                        {
+                            if (optionalTagsArraySize == null && reader.PeekState() == CborReaderState.EndArray) break;
+                            optionalTagsList.Add(reader.ReadTextString());
+                        }
+                        reader.ReadEndArray();
+                        person.OptionalTags = optionalTagsList.ToArray();
+                    }
+                    break;
+                case "PreviousAddresses":
+                    if (reader.PeekState() == CborReaderState.Null)
+                    {
+                        reader.ReadNull();
+                        person.PreviousAddresses = null;
+                    }
+                    else
+                    {
+                        var previousAddressesList = new List<Address>();
+                        int? previousAddressesArraySize = reader.ReadStartArray();
+                        for (int i = 0; previousAddressesArraySize == null || i < previousAddressesArraySize; i++)
+                        {
+                            if (previousAddressesArraySize == null && reader.PeekState() == CborReaderState.EndArray) break;
+                            previousAddressesList.Add(Address.Deserialize(reader));
+                        }
+                        reader.ReadEndArray();
+                        person.PreviousAddresses = previousAddressesList.ToArray();
                     }
                     break;
                 

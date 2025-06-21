@@ -108,6 +108,31 @@ public class AllTypesModel
     public bool? NullableBool { get; set; }
 }
 
+public class ArrayModel
+{
+    public string[] StringArray { get; set; } = Array.Empty<string>();
+    public int[] IntArray { get; set; } = Array.Empty<int>();
+    public double[] DoubleArray { get; set; } = Array.Empty<double>();
+    public SimpleModel[] ObjectArray { get; set; } = Array.Empty<SimpleModel>();
+}
+
+public class NullableArrayModel
+{
+    public string[]? OptionalStringArray { get; set; }
+    public int[]? OptionalIntArray { get; set; }
+    public SimpleModel[]? OptionalObjectArray { get; set; }
+}
+
+public class MixedArrayModel
+{
+    public string Name { get; set; } = string.Empty;
+    public string[] Tags { get; set; } = Array.Empty<string>();
+    public int[] Scores { get; set; } = Array.Empty<int>();
+    public List<string> Notes { get; set; } = new();
+    public Dictionary<string, string> Metadata { get; set; } = new();
+    public SimpleModel[]? OptionalModels { get; set; }
+}
+
 // Test context for source generator
 [CbOrSerializable(typeof(SimpleModel))]
 [CbOrSerializable(typeof(GuidModel))]
@@ -120,6 +145,9 @@ public class AllTypesModel
 [CbOrSerializable(typeof(NullableDictionaryModel))]
 [CbOrSerializable(typeof(ComplexDictionaryModel))]
 [CbOrSerializable(typeof(AllTypesModel))]
+[CbOrSerializable(typeof(ArrayModel))]
+[CbOrSerializable(typeof(NullableArrayModel))]
+[CbOrSerializable(typeof(MixedArrayModel))]
 [CbOrSerializable(typeof(List<SimpleModel>))]
 [CbOrSerializable(typeof(List<string>))]
 [CbOrSerializable(typeof(Dictionary<string, string>))]
@@ -130,6 +158,10 @@ public class AllTypesModel
 [CbOrSerializable(typeof(Dictionary<string, SimpleModel>))]
 [CbOrSerializable(typeof(Dictionary<string, List<string>>))]
 [CbOrSerializable(typeof(Dictionary<string, Dictionary<string, int>>))]
+[CbOrSerializable(typeof(string[]))]
+[CbOrSerializable(typeof(int[]))]
+[CbOrSerializable(typeof(double[]))]
+[CbOrSerializable(typeof(SimpleModel[]))]
 public partial class TestCbOrContext : CbOrSerializerContext
 {
 }

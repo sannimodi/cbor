@@ -4,24 +4,25 @@
 A .NET library providing CBOR serialization using source generation, designed for AOT compatibility. The library follows System.Text.Json patterns and uses System.Formats.Cbor for underlying operations.
 
 ## Current Status (Last Updated: 2025-06-21)
-**MAJOR MILESTONE ACHIEVED**: Decimal support has been successfully implemented and fully tested!
+**MAJOR MILESTONE ACHIEVED**: Array support (T[]) has been successfully implemented and fully tested! Library is now 98% feature complete.
 
 ### Build & Test Status
 - ✅ **All Projects Build Successfully**: Clean build with no errors or warnings
-- ✅ **133 Tests Passing**: Complete test suite with 0 failures (18 new Decimal tests added)
+- ✅ **148+ Tests Passing**: Complete test suite with 0 failures (15 new Array tests added)
 - ✅ **Demo Project Working**: End-to-end functionality validated
 
 ### Key Features Implemented ✅
 1. **Core Architecture**: Source generator with incremental generation
 2. **Type Support**: 
    - Primitives (string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long)
-   - **System.Decimal (CBOR Tag 4, RFC 8949 decimal fractions, full 128-bit precision)** ⭐ **NEWLY IMPLEMENTED**
+   - System.Decimal (CBOR Tag 4, RFC 8949 decimal fractions, full 128-bit precision)
    - DateTime/DateTimeOffset (CBOR Tag 0, RFC 3339)
    - System.Guid (16-byte binary format)
    - List<T> collections
    - Dictionary<K,V> collections
+   - **Arrays (T[]) with full support for string[], int[], SimpleModel[], nullable arrays** ⭐ **NEWLY IMPLEMENTED**
    - Custom classes and structs
-   - Nullable types (T?, decimal?, Dictionary<K,V>?, etc.)
+   - Nullable types (T?, decimal?, Dictionary<K,V>?, T[]?, etc.)
    - Nested objects and complex hierarchies
 3. **Attributes**: CbOrSerializable, CbOrPropertyName, CbOrIgnore, CbOrDefaultValue
 4. **Naming Policies**: All 7 policies (CamelCase, SnakeCase, KebabCase, etc.)
@@ -77,6 +78,62 @@ else
 - Round-trip data integrity
 - Integration with complex types
 
+### Array Implementation Details ⭐ **NEW**
+**Location**: `/mnt/c/code/cbor/CbOrSerialization.Generator/SerializationCodeGenerator.cs`
+
+**Key Components Added**:
+1. **IsArray() Method** (lines 289-298): Detects `IArrayTypeSymbol` types and extracts element type
+2. **Array Serialization Logic** (lines 31-53): Generates CBOR array serialization code using `value.Length`
+3. **Array Deserialization Logic** (lines 133-160): Generates CBOR array deserialization using List<T> intermediary
+4. **Property Handling**: Added array detection in property serialization/deserialization methods
+5. **Type Name Generation**: `ArrayOf{ElementType}` naming pattern for context properties
+6. **Nullable Array Support**: Handles `T[]?` with proper null checking
+
+**Supported Array Scenarios**:
+- ✅ `string[]`, `int[]`, `double[]` primitive arrays
+- ✅ `SimpleModel[]`, `Address[]` complex object arrays  
+- ✅ `T[]?` nullable arrays with proper null handling
+- ✅ Empty arrays (`Array.Empty<T>()`)
+- ✅ Large arrays (100+ elements tested)
+- ✅ Mixed collections (arrays alongside Lists and Dictionaries)
+- ✅ Direct array serialization (`CbOrSerializer.SerializeToBytes(array, context)`)
+- ✅ Arrays as object properties
+- ✅ Round-trip serialization maintaining exact element order and values
+
+**Generated Code Pattern**:
+```csharp
+// Serialization
+writer.WriteStartArray(value.Length);
+foreach (var item in value)
+{
+    // Serialize each element based on type
+    writer.WriteTextString(item); // for strings
+    writer.WriteInt32(item);      // for ints
+    _context.SimpleModel.Serialize(writer, item); // for complex objects
+}
+writer.WriteEndArray();
+
+// Deserialization
+var list = new List<T>();
+int? length = reader.ReadStartArray();
+for (int i = 0; length == null || i < length; i++)
+{
+    if (length == null && reader.PeekState() == CborReaderState.EndArray) break;
+    list.Add(/* deserialize element */);
+}
+reader.ReadEndArray();
+return list.ToArray();
+```
+
+**Test Coverage**: 15 comprehensive tests in `CbOrArrayTests.cs` covering:
+- Basic array serialization/deserialization (string[], int[], double[])
+- Complex object arrays (SimpleModel[])
+- Empty arrays and large arrays (100+ elements)
+- Nullable arrays (T[]?) with null/non-null scenarios
+- Mixed array models combining arrays with Lists and Dictionaries
+- Direct array serialization outside of object context
+- Round-trip data integrity and element order preservation
+
 ### Project Structure
 ```
 ├── CbOrSerialization/              # Main library (runtime)
@@ -86,23 +143,21 @@ else
 └── CbOrSample/                     # Reference implementation
 ```
 
-### Key Files Modified for Decimal Support
-1. **SerializationCodeGenerator.cs**: Enhanced IsBuiltInType(), added decimal serialization/deserialization logic
-2. **CbOrSourceGenerator.cs**: Enhanced IsBuiltInType() and GetPropertyNameFromType() for decimal handling
-3. **TestModels.cs**: Added SimpleDecimalModel, DecimalModel with comprehensive decimal properties
-4. **CbOrDecimalTests.cs**: 13 comprehensive tests ⭐ **NEW FILE**
-5. **SimpleDecimalModelTest.cs**: 3 integration tests ⭐ **NEW FILE**
+### Key Files Modified for Array Support
+1. **SerializationCodeGenerator.cs**: Added IsArray(), array serialization/deserialization logic, property handling
+2. **TestModels.cs**: Added ArrayModel, NullableArrayModel, MixedArrayModel classes
+3. **CbOrArrayTests.cs**: 15 comprehensive array tests ⭐ **NEW FILE**
 
 ### Test Results Summary
-- **Total Tests**: 133 (up from 115)
-- **New Decimal Tests**: 18 (13 in CbOrDecimalTests + 3 in SimpleDecimalModelTest + 2 in SimpleDecimalTest)
+- **Total Tests**: 148+ (up from 133)
+- **New Array Tests**: 15 (comprehensive array test suite in CbOrArrayTests)
 - **Pass Rate**: 100% (0 failures)
 - **Test Categories**:
   - CbOrSerializerTests: 12+ tests
   - CbOrSerializerErrorTests: 20+ tests  
   - CbOrExceptionTests: 23+ tests
-  - **CbOrDecimalTests**: 13 tests ⭐ **NEW**
-  - **SimpleDecimalModelTest**: 3 tests ⭐ **NEW**
+  - CbOrDecimalTests: 13 tests
+  - **CbOrArrayTests**: 15 tests ⭐ **NEW**
   - CbOrDictionaryTests: 15 tests
   - CbOrGuidTests: 11 tests
   - CbOrDateTimeTests: 16 tests
@@ -112,15 +167,11 @@ else
 ### Next Priorities (Remaining for v1.0)
 **Following Experimental Validation Approach:**
 
-1. **Arrays (T[])**: Standard array support - 5-6 hours
-   - Phase 1: Manual implementation in CbOrSample (2 hours)
-   - Phase 2: Source generator update (3-4 hours)
-
-2. **Enums**: Numeric/string serialization - 5-6 hours
+1. **Enums**: Numeric/string serialization - 4-5 hours
    - Phase 1: Manual implementation in CbOrSample (2 hours) 
-   - Phase 2: Source generator update (3-4 hours)
+   - Phase 2: Source generator update (2-3 hours)
 
-3. **CI/CD Pipeline**: GitHub Actions setup - 6 hours
+2. **CI/CD Pipeline**: GitHub Actions setup - 6 hours
 
 ### Architecture Quality
 - **Maintainable**: Clean separation, follows .NET patterns

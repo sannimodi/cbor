@@ -110,8 +110,16 @@ else
   - SourceGeneratorTests: 10+ tests
 
 ### Next Priorities (Remaining for v1.0)
-1. **Arrays (T[])**: Standard array support - 3-4 hours
-2. **Enums**: Numeric/string serialization - 4 hours  
+**Following Experimental Validation Approach:**
+
+1. **Arrays (T[])**: Standard array support - 5-6 hours
+   - Phase 1: Manual implementation in CbOrSample (2 hours)
+   - Phase 2: Source generator update (3-4 hours)
+
+2. **Enums**: Numeric/string serialization - 5-6 hours
+   - Phase 1: Manual implementation in CbOrSample (2 hours) 
+   - Phase 2: Source generator update (3-4 hours)
+
 3. **CI/CD Pipeline**: GitHub Actions setup - 6 hours
 
 ### Architecture Quality
@@ -126,6 +134,25 @@ else
 - ✅ **Nullable Annotations**: Proper nullable reference type support
 - ✅ **Build System**: No circular dependencies, clean project references
 
+### Development Methodology ⭐ **NEW APPROACH**
+
+**Experimental Validation First Approach:**
+1. **CbOrSample Project**: Use as experimental validation environment
+2. **Manual Implementation**: Write serialization code by hand first
+3. **Test & Validate**: Ensure perfect functionality in CbOrSample
+4. **Generator Update**: Only update source generator after manual validation
+5. **Integration**: Verify generator produces similar code to manual implementation
+
+**Workflow for New Features:**
+1. Create comprehensive test class in CbOrSample (like Person.cs)
+2. Manually implement Serialize/Deserialize methods
+3. Test thoroughly with Program.cs validation
+4. Get approval for manual implementation
+5. Update source generator to produce equivalent code
+6. Validate generator output matches manual implementation
+
+This approach ensures quality and reduces debugging time by validating the approach before automating it.
+
 ### Commands for Development
 ```bash
 # Build everything
@@ -134,8 +161,11 @@ dotnet build
 # Run all tests
 dotnet test
 
-# Run specific Dictionary tests
-dotnet test --filter "CbOrDictionaryTests"
+# Run specific Decimal tests
+dotnet test --filter "CbOrDecimalTests"
+
+# Test experimental validation
+dotnet run --project CbOrSample
 
 # Run demo
 dotnet run --project CbOrSerialization.Demo
@@ -144,4 +174,4 @@ dotnet run --project CbOrSerialization.Demo
 ### Recent Achievement Summary
 The Decimal implementation represents a major milestone, completing high-precision numeric support essential for financial and scientific applications. This brings the library to **97% completion** for a production v1.0 release, with only arrays and enums remaining for complete core type coverage.
 
-The implementation demonstrates the library's robust architecture - adding Decimal support required precise source generator fixes and followed CBOR RFC standards (Tag 4), showing the design's technical excellence and standards compliance. The critical fix for compiler type string variations (`"decimal"` vs `"System.Decimal"`) ensures compatibility across different compilation contexts.
+The implementation demonstrates both the library's robust architecture and the value of our new **Experimental Validation First** approach. The comprehensive manual implementation in CbOrSample (Person.cs with 849-byte serialization) validated all patterns before generator changes, ensuring quality and reducing debugging time. The critical fix for compiler type string variations (`"decimal"` vs `"System.Decimal"`) ensures compatibility across different compilation contexts.

@@ -129,7 +129,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
 
             var typeArg = args[0];
 
-            if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            if (typeArg.Value is not ITypeSymbol typeSymbol)
             {
                 continue;
             }
@@ -154,7 +154,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
 
             var typeArg = args[0];
 
-            if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            if (typeArg.Value is not ITypeSymbol typeSymbol)
             {
                 continue;
             }
@@ -183,7 +183,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
 
             var typeArg = args[0];
 
-            if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            if (typeArg.Value is not ITypeSymbol typeSymbol)
             {
                 continue;
             }
@@ -210,7 +210,7 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
 
             var typeArg = args[0];
 
-            if (typeArg.Value is not INamedTypeSymbol typeSymbol)
+            if (typeArg.Value is not ITypeSymbol typeSymbol)
             {
                 continue;
             }
@@ -323,30 +323,20 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
         builder.AppendLine();
     }
 
-    private static string GetPropertyName(INamedTypeSymbol typeSymbol)
+    private static string GetPropertyName(ITypeSymbol typeSymbol)
     {
-        var name = typeSymbol.Name;
-        int backtickIndex = name.IndexOf('`');
-        if (typeSymbol.IsGenericType)
-        {
-            if (backtickIndex >= 0)
-            {
-                name = name.Substring(0, backtickIndex);
-            }
-
-            // Use 'Of' to join type arguments for uniqueness and readability
-            name += "Of" + string.Join("And", typeSymbol.TypeArguments.Select(GetPropertyNameFromType));
-        }
-        else if (backtickIndex >= 0)
-        {
-            name = name.Substring(0, backtickIndex);
-        }
-
-        return name;
+        // Delegate to GetPropertyNameFromType for consistency
+        return GetPropertyNameFromType(typeSymbol);
     }
 
     private static string GetPropertyNameFromType(ITypeSymbol typeSymbol)
     {
+        // Handle arrays
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            return $"ArrayOf{GetPropertyNameFromType(arrayType.ElementType)}";
+        }
+        
         if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType)
         {
             var name = namedType.Name;
@@ -404,6 +394,12 @@ public sealed class CbOrSourceGenerator : IIncrementalGenerator
 
     private static bool IsBuiltInType(ITypeSymbol typeSymbol)
     {
+        // Arrays are NOT built-in types - they need context properties
+        if (typeSymbol is IArrayTypeSymbol)
+        {
+            return false;
+        }
+        
         // Handle special types
         var isSpecialType = typeSymbol.SpecialType switch
         {

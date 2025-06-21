@@ -2,7 +2,7 @@ namespace CbOrSerialization.Generator;
 
 internal static class SerializationCodeGenerator
 {
-    public static string GenerateSerializationCode(INamedTypeSymbol typeSymbol, CbOrKnownNamingPolicy namingPolicy, string contextRef = "this")
+    public static string GenerateSerializationCode(ITypeSymbol typeSymbol, CbOrKnownNamingPolicy namingPolicy, string contextRef = "this")
     {
         var builder = new StringBuilder();
         if (IsList(typeSymbol, out var elementType))
@@ -86,7 +86,7 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("writer.WriteEndMap();");
             return builder.ToString();
         }
-        var properties = GetSerializableProperties(typeSymbol);
+        var properties = GetSerializableProperties(typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties"));
         builder.AppendLine("writer.WriteStartMap(null);");
         foreach (var property in properties)
         {
@@ -99,7 +99,7 @@ internal static class SerializationCodeGenerator
         return builder.ToString();
     }
 
-    public static string GenerateDeserializationCode(INamedTypeSymbol typeSymbol, CbOrKnownNamingPolicy namingPolicy, string contextRef = "this")
+    public static string GenerateDeserializationCode(ITypeSymbol typeSymbol, CbOrKnownNamingPolicy namingPolicy, string contextRef = "this")
     {
         var builder = new StringBuilder();
         if (IsList(typeSymbol, out var elementType))
@@ -198,7 +198,7 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("return dictionary;");
             return builder.ToString();
         }
-        var properties = GetSerializableProperties(typeSymbol);
+        var properties = GetSerializableProperties(typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties"));
         builder.AppendLine($"var result = new {typeSymbol.ToDisplayString()}();");
         builder.AppendLine("reader.ReadStartMap();");
         builder.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
@@ -352,25 +352,25 @@ internal static class SerializationCodeGenerator
         return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader)";
     }
 
-    private static bool IsList(INamedTypeSymbol typeSymbol, out ITypeSymbol? elementType)
+    private static bool IsList(ITypeSymbol typeSymbol, out ITypeSymbol? elementType)
     {
         elementType = null;
-        if (typeSymbol is { IsGenericType: true } && typeSymbol.Name == "List" && typeSymbol.TypeArguments.Length == 1)
+        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "List" && namedType.TypeArguments.Length == 1)
         {
-            elementType = typeSymbol.TypeArguments[0];
+            elementType = namedType.TypeArguments[0];
             return true;
         }
         return false;
     }
 
-    private static bool IsDictionary(INamedTypeSymbol typeSymbol, out ITypeSymbol? keyType, out ITypeSymbol? valueType)
+    private static bool IsDictionary(ITypeSymbol typeSymbol, out ITypeSymbol? keyType, out ITypeSymbol? valueType)
     {
         keyType = null;
         valueType = null;
-        if (typeSymbol is { IsGenericType: true } && typeSymbol.Name == "Dictionary" && typeSymbol.TypeArguments.Length == 2)
+        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "Dictionary" && namedType.TypeArguments.Length == 2)
         {
-            keyType = typeSymbol.TypeArguments[0];
-            valueType = typeSymbol.TypeArguments[1];
+            keyType = namedType.TypeArguments[0];
+            valueType = namedType.TypeArguments[1];
             return true;
         }
         return false;

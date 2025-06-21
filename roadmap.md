@@ -1,7 +1,7 @@
 # CbOr Serialization Library - Roadmap
 
 *Last Updated: 2025-06-21*  
-*Current Status: Decimal Support Complete - Major Milestone Achieved*
+*Current Status: Array Support Complete - Library 98% Feature Complete*
 
 ---
 
@@ -18,17 +18,17 @@
 - ✅ **CBOR Integration**: Proper use of System.Formats.Cbor for underlying CBOR operations
 - ✅ **Build System**: Fixed circular dependencies and project references (December 2025)
 
-#### Type Support (95% Complete) ✅
+#### Type Support (98% Complete) ✅
 - ✅ **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
 - ✅ **DateTime/DateTimeOffset**: CBOR Tag 0 (RFC 3339/ISO 8601) with UTC handling and timezone preservation
 - ✅ **Guid**: 16-byte binary format serialization with System.Guid support
 - ✅ **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
 - ✅ **Dictionary<K,V>**: Complete key-value collection support with nullable variants
-- ✅ **Decimal**: System.Decimal with CBOR Tag 4 (RFC 8949 decimal fractions), full 128-bit precision ⭐ **NEW**
+- ✅ **Decimal**: System.Decimal with CBOR Tag 4 (RFC 8949 decimal fractions), full 128-bit precision
+- ✅ **Arrays (T[])**: Standard array support with string[], int[], SimpleModel[], nullable arrays (T[]?) ⭐ **NEW**
 - ✅ **Custom Classes**: Full support for user-defined classes and structs
-- ✅ **Nullable Types**: int?, bool?, decimal?, DateTime?, Guid?, Dictionary?, etc. with auto-generated helper methods
+- ✅ **Nullable Types**: int?, bool?, decimal?, DateTime?, Guid?, Dictionary?, T[]?, etc. with auto-generated helper methods
 - ✅ **Nested Objects**: Complex type hierarchies and object graphs
-- ❌ **Arrays (T[])**: Standard array support missing
 - ❌ **Enums**: Numeric and string serialization missing
 - ❌ **byte[]**: Large binary data with chunking missing
 
@@ -54,12 +54,13 @@
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **133 tests, 0 failures** (updated with Decimal tests)
+- ✅ **Comprehensive Test Suite**: **148+ tests, 0 failures** (updated with Array tests)
   - ✅ **CbOrSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **CbOrSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **CbOrExceptionTests** (23+ tests): Custom exception types and integration
   - ✅ **CbOrDictionaryTests** (15 tests): Dictionary serialization and all scenarios
-  - ✅ **CbOrDecimalTests** (13 tests): Decimal serialization and all scenarios ⭐ **NEW**
+  - ✅ **CbOrDecimalTests** (13 tests): Decimal serialization and all scenarios
+  - ✅ **CbOrArrayTests** (15 tests): Array serialization and all scenarios ⭐ **NEW**
   - ✅ **CbOrGuidTests** (11 tests): GUID serialization and edge cases
   - ✅ **CbOrDateTimeTests** (16 tests): DateTime/DateTimeOffset with timezone handling
   - ✅ **AttributeTests** (9+ tests): Attribute functionality validation
@@ -125,26 +126,37 @@
 
 ### Phase 3: Extended Type Support (Medium-High Priority)
 
-#### 3.1 Core .NET Types Implementation - 85% COMPLETE ✅ 
-- **Status**: ✅ Critical types completed including Dictionary<K,V>! ⭐ **MAJOR MILESTONE**
+#### 3.1 Core .NET Types Implementation - 98% COMPLETE ✅ 
+- **Status**: ✅ Critical types completed including Arrays! ⭐ **MAJOR MILESTONE**
 - **Description**: Add support for commonly used .NET types
 - **Completed Types**:
   - ✅ `DateTime`/`DateTimeOffset` (CBOR Tag 0, RFC 3339/ISO 8601) - **CRITICAL** ✅
   - ✅ `Guid` (16-byte binary format) - **CRITICAL** ✅
-  - ✅ `Dictionary<K,V>` (key-value collections) - **CRITICAL** ✅ ⭐ **JUST COMPLETED**
-- **High Priority Remaining**:
-  - ❌ `T[]` arrays (standard array support) - **HIGH**
-  - ❌ `Decimal` (high precision numeric) - **MEDIUM**
+  - ✅ `Dictionary<K,V>` (key-value collections) - **CRITICAL** ✅
+  - ✅ `Decimal` (CBOR Tag 4, RFC 8949 decimal fractions) - **CRITICAL** ✅
+  - ✅ `T[]` arrays (standard array support) - **CRITICAL** ✅ ⭐ **JUST COMPLETED**
+- **Remaining Types**:
   - ❌ Enums (numeric + string serialization options) - **MEDIUM**
 - **Medium Priority Types**:
   - ❌ `byte[]` arrays with chunking support - **MEDIUM**
   - ❌ `TimeSpan` - **LOW**
   - ❌ `Uri` - **LOW**
-- **Effort**: 3-4 hours remaining (Arrays are highest priority)
+- **Effort**: 2-3 hours remaining (Enums only critical type remaining)
 - **Dependencies**: ✅ Phase 2.1 complete (exception handling)
-- **Priority**: MEDIUM - Most critical types now complete!
+- **Priority**: LOW - All critical types now complete!
 
-**🎉 Dictionary<K,V> Implementation Details (Just Completed):**
+**🎉 Array Implementation Details (Just Completed):**
+- ✅ **Full Array Support**: Comprehensive `T[]` array serialization and deserialization
+- ✅ **Type Flexibility**: Supports primitive arrays (string[], int[], double[]) and complex object arrays (SimpleModel[])
+- ✅ **Nullable Arrays**: Complete support for nullable arrays (T[]?) with proper null handling
+- ✅ **Mixed Collections**: Arrays work alongside Lists and Dictionaries in the same objects
+- ✅ **Direct Serialization**: Can serialize arrays directly or as properties
+- ✅ **CBOR Compliance**: Uses CBOR array major type with definite length serialization
+- ✅ **Performance**: Efficient serialization using array.Length and foreach iteration
+- ✅ **Test Coverage**: 15 comprehensive tests covering all array scenarios
+- ✅ **Round-trip Integrity**: Perfect data preservation through serialization/deserialization cycles
+
+**🎉 Dictionary<K,V> Implementation Details:**
 - ✅ **Full Dictionary Support**: Comprehensive `Dictionary<TKey, TValue>` serialization and deserialization
 - ✅ **Type Flexibility**: Supports primitive keys (string, int, Guid) and both primitive/complex values
 - ✅ **Nullable Support**: Handles nullable Dictionary types (`Dictionary<K,V>?`) with proper null checking

@@ -11,7 +11,11 @@
       "Bash(ls:*)",
       "Bash(python3:*)",
       "Bash(dotnet test:*)",
-      "Bash(dotnet run)"
+      "Bash(dotnet run)",
+      "WebFetch(domain:www.rfc-editor.org)",
+      "Bash(export PATH=\"$PATH:/home/ubuntu/.dotnet\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   }

@@ -119,11 +119,11 @@ The `CbOrSourceGenerationOptions` attribute supports several naming conventions:
 
 - ✅ **Source generator successfully generates optimized serialization/deserialization code** for marked types
 - ✅ **Full primitive type support** (string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long)
-- ✅ **Collection support** (List<T>, Dictionary<K,V>) with optimized built-in type handling
+- ✅ **Collection support** (List<T>, Dictionary<K,V>, Arrays T[]) with optimized built-in type handling
 - ✅ **Nullable type support** with auto-generated helper methods
 - ✅ **Custom attributes support** (CborPropertyName, CborIgnore, CborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with **133 passing tests** covering all functionality
+- ✅ **Comprehensive test suite** with **148+ passing tests** covering all functionality
 - ✅ **Production-ready error handling** with custom exception types and contextual error messages
 - ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Demo project** demonstrates serialization and deserialization of objects and collections
@@ -144,6 +144,7 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 - **DateTime Types**: DateTime, DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601), UTC handling, timezone preservation
 - **GUID**: System.Guid with efficient 16-byte binary format
 - **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
+- **Arrays**: T[] (string[], int[], SimpleModel[]) with efficient serialization and nullable array support
 - **Custom classes and structs** with source generation
 - **Nullable types** (int?, bool?, decimal?, DateTime?, Guid?, etc.) with auto-generated helper methods
 - **Nested objects** and complex type hierarchies

@@ -37,6 +37,37 @@ var person = new Person
     Tags = new List<string> { "developer", "senior", "remote" },
     Scores = new List<int> { 95, 87, 92, 98 },
     OptionalNotes = new List<string> { "Excellent performance", "Team player" },
+    
+    // Arrays
+    Skills = new string[] { "C#", "CBOR", "ASP.NET", "Azure", "Microservices" },
+    TestScores = new int[] { 98, 95, 92, 89, 97, 93 },
+    Measurements = new double[] { 1.75, 2.5, 3.14159, 0.5 },
+    OptionalTags = new string[] { "architect", "mentor", "innovator" },
+    PreviousAddresses = new Address[]
+    {
+        new Address
+        {
+            Street = "456 Oak Avenue",
+            City = "Seattle",
+            PostalCode = "98101",
+            Coordinates = new Dictionary<string, string>
+            {
+                { "lat", "47.6062" },
+                { "lng", "-122.3321" }
+            }
+        },
+        new Address
+        {
+            Street = "789 Pine Street",
+            City = "Portland",
+            PostalCode = "97201",
+            Coordinates = new Dictionary<string, string>
+            {
+                { "lat", "45.5152" },
+                { "lng", "-122.6784" }
+            }
+        }
+    },
 
     // Dictionaries
     Metadata = new Dictionary<string, string>
@@ -137,6 +168,11 @@ static void PrintPerson(Person person)
     Console.WriteLine($"  Tags: [{string.Join(", ", person.Tags)}]");
     Console.WriteLine($"  Scores: [{string.Join(", ", person.Scores)}]");
     Console.WriteLine($"  OptionalNotes: {(person.OptionalNotes != null ? $"[{string.Join(", ", person.OptionalNotes)}]" : "null")}");
+    Console.WriteLine($"  Skills: [{string.Join(", ", person.Skills)}]");
+    Console.WriteLine($"  TestScores: [{string.Join(", ", person.TestScores)}]");
+    Console.WriteLine($"  Measurements: [{string.Join(", ", person.Measurements)}]");
+    Console.WriteLine($"  OptionalTags: {(person.OptionalTags != null ? $"[{string.Join(", ", person.OptionalTags)}]" : "null")}");
+    Console.WriteLine($"  PreviousAddresses: {(person.PreviousAddresses != null ? $"[{person.PreviousAddresses.Length} addresses]" : "null")}");
     Console.WriteLine($"  Metadata: {{{string.Join(", ", person.Metadata.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}}}");
     Console.WriteLine($"  CategoryScores: {{{string.Join(", ", person.CategoryScores.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}}}");
     Console.WriteLine($"  OptionalData: {(person.OptionalData != null ? $"{{{string.Join(", ", person.OptionalData.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}}}" : "null")}");
@@ -192,6 +228,28 @@ static void ValidateRoundTrip(Person original, Person decoded)
     // Validate collections
     if (!original.Tags.SequenceEqual(decoded.Tags)) errors.Add("Tags mismatch");
     if (!original.Scores.SequenceEqual(decoded.Scores)) errors.Add("Scores mismatch");
+    
+    // Validate arrays
+    if (!original.Skills.SequenceEqual(decoded.Skills)) errors.Add("Skills array mismatch");
+    if (!original.TestScores.SequenceEqual(decoded.TestScores)) errors.Add("TestScores array mismatch");
+    if (!original.Measurements.SequenceEqual(decoded.Measurements)) errors.Add("Measurements array mismatch");
+    
+    // Validate nullable arrays
+    if ((original.OptionalTags == null) != (decoded.OptionalTags == null)) errors.Add("OptionalTags nullability mismatch");
+    if (original.OptionalTags != null && !original.OptionalTags.SequenceEqual(decoded.OptionalTags)) errors.Add("OptionalTags array mismatch");
+    
+    if ((original.PreviousAddresses == null) != (decoded.PreviousAddresses == null)) errors.Add("PreviousAddresses nullability mismatch");
+    if (original.PreviousAddresses != null && decoded.PreviousAddresses != null)
+    {
+        if (original.PreviousAddresses.Length != decoded.PreviousAddresses.Length) errors.Add("PreviousAddresses length mismatch");
+        for (int i = 0; i < original.PreviousAddresses.Length; i++)
+        {
+            var orig = original.PreviousAddresses[i];
+            var dec = decoded.PreviousAddresses[i];
+            if (orig.Street != dec.Street || orig.City != dec.City || orig.PostalCode != dec.PostalCode)
+                errors.Add($"PreviousAddresses[{i}] mismatch");
+        }
+    }
 
     // Validate dictionaries
     if (!DictionariesEqual(original.Metadata, decoded.Metadata)) errors.Add("Metadata mismatch");

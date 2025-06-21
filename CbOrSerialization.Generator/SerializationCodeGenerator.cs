@@ -28,6 +28,29 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("writer.WriteEndArray();");
             return builder.ToString();
         }
+        if (IsArray(typeSymbol, out var arrayElementType))
+        {
+            if (arrayElementType == null)
+                throw new InvalidOperationException("Element type cannot be null for a valid array type.");
+                
+            builder.AppendLine("writer.WriteStartArray(value.Length);");
+            builder.AppendLine($"foreach (var item in value)");
+            builder.AppendLine("{");
+            
+            // Handle built-in types directly, complex types via context
+            if (IsBuiltInType(arrayElementType))
+            {
+                builder.AppendLine($"    {GenerateDirectSerialization("item", arrayElementType)}");
+            }
+            else
+            {
+                builder.AppendLine($"    // Use the parent context's type info for the element type");
+                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Serialize(writer, item);");
+            }
+            builder.AppendLine("}");
+            builder.AppendLine("writer.WriteEndArray();");
+            return builder.ToString();
+        }
         if (IsDictionary(typeSymbol, out var keyType, out var valueType))
         {
             if (keyType == null || valueType == null)
@@ -105,6 +128,34 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("}");
             builder.AppendLine("reader.ReadEndArray();");
             builder.AppendLine("return list;");
+            return builder.ToString();
+        }
+        if (IsArray(typeSymbol, out var arrayElementType))
+        {
+            if (arrayElementType == null)
+                throw new InvalidOperationException("Element type cannot be null for a valid array type.");
+                
+            builder.AppendLine($"var list = new System.Collections.Generic.List<{arrayElementType.ToDisplayString()}>();");
+            builder.AppendLine("int? length = reader.ReadStartArray();");
+            builder.AppendLine("for (int i = 0; length == null || i < length; i++)");
+            builder.AppendLine("{");
+            builder.AppendLine("    if (length == null && reader.PeekState() == CborReaderState.EndArray)");
+            builder.AppendLine("        break;");
+            
+            // Handle built-in types directly, complex types via context
+            if (IsBuiltInType(arrayElementType))
+            {
+                builder.AppendLine($"    var item = {GenerateDirectDeserialization(arrayElementType)};");
+            }
+            else
+            {
+                builder.AppendLine($"    // Use the parent context's type info for the element type");
+                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Deserialize(reader);");
+            }
+            builder.AppendLine("    list.Add(item);");
+            builder.AppendLine("}");
+            builder.AppendLine("reader.ReadEndArray();");
+            builder.AppendLine("return list.ToArray();");
             return builder.ToString();
         }
         if (IsDictionary(typeSymbol, out var keyType, out var valueType))
@@ -209,6 +260,25 @@ internal static class SerializationCodeGenerator
             return GenerateDirectSerialization($"value.{property.Name}", type);
         }
         
+        // Handle arrays (including nullable arrays)
+        if (IsArray(type, out var arrayElementType))
+        {
+            if (arrayElementType == null)
+                throw new InvalidOperationException("Element type cannot be null for a valid array type.");
+                
+            return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name});";
+        }
+        
+        // Handle nullable arrays
+        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated && 
+            IsArray(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated), out var nullableArrayElementType))
+        {
+            if (nullableArrayElementType == null)
+                throw new InvalidOperationException("Element type cannot be null for a valid nullable array type.");
+                
+            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}); }} else {{ writer.WriteNull(); }}";
+        }
+        
         // Handle nullable built-in types
         if (type is INamedTypeSymbol namedType && namedType.IsGenericType && 
             namedType.Name == "Nullable" && namedType.TypeArguments.Length == 1)
@@ -238,6 +308,26 @@ internal static class SerializationCodeGenerator
         if (IsBuiltInType(type))
         {
             return GenerateDirectDeserialization(type);
+        }
+        
+        // Handle arrays (including nullable arrays)
+        if (IsArray(type, out var arrayElementType))
+        {
+            if (arrayElementType == null)
+                throw new InvalidOperationException("Element type cannot be null for a valid array type.");
+                
+            return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader)";
+        }
+        
+        // Handle nullable arrays
+        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated && 
+            IsArray(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated), out var nullableArrayElementType))
+        {
+            if (nullableArrayElementType == null)
+                throw new InvalidOperationException("Element type cannot be null for a valid nullable array type.");
+                
+            var nonNullableType = type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated);
+            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader)";
         }
         
         // Handle nullable built-in types
@@ -286,8 +376,25 @@ internal static class SerializationCodeGenerator
         return false;
     }
 
+    private static bool IsArray(ITypeSymbol typeSymbol, out ITypeSymbol? elementType)
+    {
+        elementType = null;
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            elementType = arrayType.ElementType;
+            return true;
+        }
+        return false;
+    }
+
     private static string GetPropertyNameFromType(ITypeSymbol typeSymbol)
     {
+        // Handle arrays
+        if (typeSymbol is IArrayTypeSymbol arrayType)
+        {
+            return $"ArrayOf{GetPropertyNameFromType(arrayType.ElementType)}";
+        }
+        
         if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType)
         {
             var name = namedType.Name;

@@ -15,7 +15,8 @@
       "WebFetch(domain:www.rfc-editor.org)",
       "Bash(export PATH=\"$PATH:/home/ubuntu/.dotnet\")",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "WebFetch(domain:docs.anthropic.com)"
     ],
     "deny": []
   }

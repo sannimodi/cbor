@@ -6,9 +6,9 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 ## Project Structure
 
-- **CborSerialization**: The main runtime library that provides the core serialization logic and base classes.
-- **CborSerialization.Generator**: A source generator project that analyzes types marked with `[CborSerializable]` and generates optimized serialization/deserialization code.
-- **CborSerialization.Demo**: A demo project showcasing the usage of the library.
+- **NCbor**: The main runtime library that provides the core serialization logic and base classes.
+- **NCbor.Generator**: A source generator project that analyzes types marked with `[CborSerializable]` and generates optimized serialization/deserialization code.
+- **NCbor.Demo**: A demo project showcasing the usage of the library.
 
 ## Local Development
 
@@ -22,7 +22,7 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 2. **Build the Solution**:
    ```bash
-   dotnet build CbOrSerialization.sln
+   dotnet build NCbor.sln
    ```
 
 ### Using the Source Generator Locally
@@ -31,8 +31,8 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 - To use the generator in your project, add the following to your `.csproj`:
   ```xml
   <ItemGroup>
-      <ProjectReference Include="..\CborSerialization\CborSerialization.csproj" />
-      <Analyzer Include="..\CborSerialization.Generator\bin\Debug\netstandard2.0\CborSerialization.Generator.dll" />
+      <ProjectReference Include="..\NCbor\NCbor.csproj" />
+      <Analyzer Include="..\NCbor.Generator\bin\Debug\netstandard2.0\NCbor.Generator.dll" />
   </ItemGroup>
   ```
 
@@ -47,7 +47,7 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 ### Preparing the Generator for NuGet
 
 1. **Update the Generator Project File**:
-   Add the following to `CborSerialization.Generator.csproj`:
+   Add the following to `NCbor.Generator.csproj`:
    ```xml
    <PropertyGroup>
        <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -57,7 +57,7 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 2. **Pack the Generator**:
    ```bash
-   dotnet pack CborSerialization.Generator/CborSerialization.Generator.csproj
+   dotnet pack NCbor.Generator/NCbor.Generator.csproj
    ```
 
 ### Publishing to NuGet
@@ -66,14 +66,14 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 2. **Get Your API Key** from the NuGet website.
 3. **Publish the Package**:
    ```bash
-   dotnet nuget push CborSerialization.Generator/bin/Debug/CborSerialization.Generator.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
+   dotnet nuget push NCbor.Generator/bin/Debug/NCbor.Generator.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
    ```
 
 ### Using the NuGet Package
 
 - Once published, users can install the package:
   ```bash
-  dotnet add package CborSerialization.Generator
+  dotnet add package NCbor.Generator
   ```
 - The analyzer will be automatically included, and no explicit `<Analyzer>` reference is needed.
 
@@ -109,5 +109,5 @@ This project is licensed under the terms of the LICENSE file.
 
 ---
 
-For more details, refer to the [specification document](CbOrSerializationSpec.md). 
+For more details, refer to the [specification document](cbor-serialization-specs.md). 
 

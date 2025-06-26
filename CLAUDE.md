@@ -1,4 +1,4 @@
-# CbOr Serialization Library - Claude Memory
+# NCbor Serialization Library - Claude Memory
 
 ## Project Summary
 A .NET library providing CBOR serialization using source generation, designed for AOT compatibility. The library follows System.Text.Json patterns and uses System.Formats.Cbor for underlying operations.
@@ -25,13 +25,13 @@ A .NET library providing CBOR serialization using source generation, designed fo
    - Custom classes and structs
    - Nullable types (T?, decimal?, Dictionary<K,V>?, T[]?, enum?, etc.)
    - Nested objects and complex hierarchies
-3. **Attributes**: CbOrSerializable, CbOrPropertyName, CbOrIgnore, CbOrDefaultValue
+3. **Attributes**: NCborSerializable, NCborPropertyName, NCborIgnore, NCborDefaultValue
 4. **Naming Policies**: All 7 policies (CamelCase, SnakeCase, KebabCase, etc.)
 5. **Error Handling**: Custom exception types with contextual information
 6. **AOT Compatibility**: Zero runtime reflection
 
 ### Decimal Implementation Details ⭐ **NEW**
-**Location**: `/mnt/c/code/cbor/CbOrSerialization.Generator/SerializationCodeGenerator.cs`
+**Location**: `/mnt/c/code/cbor/NCbor.Generator/SerializationCodeGenerator.cs`
 
 **Key Components Added**:
 1. **IsBuiltInType() Method**: Enhanced to recognize both `"System.Decimal"` and `"decimal"` type strings
@@ -70,7 +70,7 @@ else
 
 **Critical Fix Applied**: The source generator was treating `decimal` types as complex types requiring context properties, but `System.Decimal` appears as `"decimal"` in some compilation contexts, not `"System.Decimal"`. Updated all `IsBuiltInType` checks to handle both variants.
 
-**Test Coverage**: 16 comprehensive tests (13 in `CbOrDecimalTests.cs` + 3 in `SimpleDecimalModelTest.cs`) covering:
+**Test Coverage**: 16 comprehensive tests (13 in `NCborDecimalTests.cs` + 3 in `SimpleDecimalModelTest.cs`) covering:
 - Basic serialization/deserialization
 - Nullable decimal handling  
 - Edge cases (Min/Max/Zero values)
@@ -80,7 +80,7 @@ else
 - Integration with complex types
 
 ### Array Implementation Details ⭐ **NEW**
-**Location**: `/mnt/c/code/cbor/CbOrSerialization.Generator/SerializationCodeGenerator.cs`
+**Location**: `/mnt/c/code/cbor/NCbor.Generator/SerializationCodeGenerator.cs`
 
 **Key Components Added**:
 1. **IsArray() Method** (lines 289-298): Detects `IArrayTypeSymbol` types and extracts element type
@@ -97,7 +97,7 @@ else
 - ✅ Empty arrays (`Array.Empty<T>()`)
 - ✅ Large arrays (100+ elements tested)
 - ✅ Mixed collections (arrays alongside Lists and Dictionaries)
-- ✅ Direct array serialization (`CbOrSerializer.SerializeToBytes(array, context)`)
+- ✅ Direct array serialization (`NCborSerializer.SerializeToBytes(array, context)`)
 - ✅ Arrays as object properties
 - ✅ Round-trip serialization maintaining exact element order and values
 
@@ -126,16 +126,16 @@ reader.ReadEndArray();
 return list.ToArray();
 ```
 
-**Test Coverage**: 3 comprehensive tests in `CbOrArrayTests.cs` covering:
+**Test Coverage**: 3 comprehensive tests in `NCborArrayTests.cs` covering:
 - Basic array serialization/deserialization (string[], int[])
 - Arrays as object properties (ArrayModel)
 - Direct array serialization outside of object context
 - Round-trip data integrity and element order preservation
 
-**Critical Fix Applied**: The source generator was filtering out arrays as "built-in types" in `CbOrSourceGenerator.cs:398-401`. Fixed by explicitly checking for `IArrayTypeSymbol` and returning `false` to ensure arrays get proper context properties (`ArrayOfString`, `ArrayOfInt32`, etc.).
+**Critical Fix Applied**: The source generator was filtering out arrays as "built-in types" in `NCborSourceGenerator.cs:398-401`. Fixed by explicitly checking for `IArrayTypeSymbol` and returning `false` to ensure arrays get proper context properties (`ArrayOfString`, `ArrayOfInt32`, etc.).
 
 ### Enum Implementation Details ⭐ **NEW**
-**Location**: `/mnt/c/code/cbor/CbOrSerialization.Generator/SerializationCodeGenerator.cs` and `CbOrSourceGenerator.cs`
+**Location**: `/mnt/c/code/cbor/NCbor.Generator/SerializationCodeGenerator.cs` and `NCborSourceGenerator.cs`
 
 **Key Components Added**:
 1. **Enum Detection**: Enhanced `IsBuiltInType()` to recognize `TypeKind.Enum` types
@@ -170,7 +170,7 @@ return reader.PeekState() == CborReaderState.Null
     : (UserRole)reader.ReadInt32();
 ```
 
-**Test Coverage**: 5 comprehensive tests in `CbOrEnumTests.cs` covering:
+**Test Coverage**: 5 comprehensive tests in `NCborEnumTests.cs` covering:
 - Basic enum serialization/deserialization with various backing types
 - Nullable enum handling (null and non-null scenarios)
 - Flags enum combinations and bitwise operations
@@ -181,35 +181,35 @@ return reader.PeekState() == CborReaderState.Null
 
 ### Project Structure
 ```
-├── CbOrSerialization/              # Main library (runtime)
-├── CbOrSerialization.Generator/    # Source generator
-├── CbOrSerialization.Tests/        # Test suite (133 tests)
-├── CbOrSerialization.Demo/         # Working demo
-└── CbOrSample/                     # Reference implementation
+├── NCbor/              # Main library (runtime)
+├── NCbor.Generator/    # Source generator
+├── NCbor.Tests/        # Test suite (133 tests)
+├── NCbor.Demo/         # Working demo
+└── NCborSample/                     # Reference implementation
 ```
 
 ### Key Files Modified for Array and Enum Support
 1. **SerializationCodeGenerator.cs**: Added IsArray(), enum detection, serialization/deserialization logic for both arrays and enums
-2. **CbOrSourceGenerator.cs**: Enhanced IsBuiltInType() for arrays and enums, added ReadNullEnum<T> helper
+2. **NCborSourceGenerator.cs**: Enhanced IsBuiltInType() for arrays and enums, added ReadNullEnum<T> helper
 3. **TestModels.cs**: Added ArrayModel, EnumModel classes with comprehensive enum types
-4. **CbOrArrayTests.cs**: 3 comprehensive array tests ⭐ **NEW FILE**
-5. **CbOrEnumTests.cs**: 5 comprehensive enum tests ⭐ **NEW FILE**
-6. **CbOrSample/Enums.cs**: Experimental validation with manual enum implementation ⭐ **NEW FILE**
+4. **NCborArrayTests.cs**: 3 comprehensive array tests ⭐ **NEW FILE**
+5. **NCborEnumTests.cs**: 5 comprehensive enum tests ⭐ **NEW FILE**
+6. **NCborSample/Enums.cs**: Experimental validation with manual enum implementation ⭐ **NEW FILE**
 
 ### Test Results Summary
 - **Total Tests**: 141 (up from 136)
 - **New Tests**: 3 Array tests + 5 Enum tests = 8 new tests
 - **Pass Rate**: 100% (0 failures)
 - **Test Categories**:
-  - CbOrSerializerTests: 12+ tests
-  - CbOrSerializerErrorTests: 20+ tests  
-  - CbOrExceptionTests: 23+ tests
-  - CbOrDecimalTests: 13 tests
-  - **CbOrArrayTests**: 3 tests ⭐ **IMPLEMENTED**
-  - **CbOrEnumTests**: 5 tests ⭐ **NEW**
-  - CbOrDictionaryTests: 15 tests
-  - CbOrGuidTests: 11 tests
-  - CbOrDateTimeTests: 16 tests
+  - NCborSerializerTests: 12+ tests
+  - NCborSerializerErrorTests: 20+ tests  
+  - NCborExceptionTests: 23+ tests
+  - NCborDecimalTests: 13 tests
+  - **NCborArrayTests**: 3 tests ⭐ **IMPLEMENTED**
+  - **NCborEnumTests**: 5 tests ⭐ **NEW**
+  - NCborDictionaryTests: 15 tests
+  - NCborGuidTests: 11 tests
+  - NCborDateTimeTests: 16 tests
   - AttributeTests: 9+ tests
   - SourceGeneratorTests: 10+ tests
 
@@ -217,7 +217,7 @@ return reader.PeekState() == CborReaderState.Null
 **Core features are 99% complete! Only optional enhancements remain:**
 
 1. **✅ Enums**: Numeric serialization - ✅ **COMPLETED** 
-   - ✅ Phase 1: Manual implementation in CbOrSample - **DELIVERED**
+   - ✅ Phase 1: Manual implementation in NCborSample - **DELIVERED**
    - ✅ Phase 2: Source generator update - **DELIVERED**
 
 2. **CI/CD Pipeline**: GitHub Actions setup - 6 hours (Optional for v1.0)
@@ -243,14 +243,14 @@ return reader.PeekState() == CborReaderState.Null
 ### Development Methodology ⭐ **NEW APPROACH**
 
 **Experimental Validation First Approach:**
-1. **CbOrSample Project**: Use as experimental validation environment
+1. **NCborSample Project**: Use as experimental validation environment
 2. **Manual Implementation**: Write serialization code by hand first
-3. **Test & Validate**: Ensure perfect functionality in CbOrSample
+3. **Test & Validate**: Ensure perfect functionality in NCborSample
 4. **Generator Update**: Only update source generator after manual validation
 5. **Integration**: Verify generator produces similar code to manual implementation
 
 **Workflow for New Features:**
-1. Create comprehensive test class in CbOrSample (like Person.cs)
+1. Create comprehensive test class in NCborSample (like Person.cs)
 2. Manually implement Serialize/Deserialize methods
 3. Test thoroughly with Program.cs validation
 4. Get approval for manual implementation
@@ -268,22 +268,22 @@ dotnet build
 dotnet test
 
 # Run specific Decimal tests
-dotnet test --filter "CbOrDecimalTests"
+dotnet test --filter "NCborDecimalTests"
 
 # Test experimental validation
-dotnet run --project CbOrSample
+dotnet run --project NCborSample
 
 # Run demo
-dotnet run --project CbOrSerialization.Demo
+dotnet run --project NCbor.Demo
 ```
 
 ### Recent Achievement Summary
 **Array and Enum Implementation Completed Successfully!** Following the successful Decimal implementation, both Array (T[]) and Enum support have now been fully implemented and tested. This brings the library to **99% completion** for a production v1.0 release.
 
 **Key Technical Achievements**:
-1. **Arrays**: Fixed source generator filtering issue in `CbOrSourceGenerator.cs:398-401` to create proper context properties
+1. **Arrays**: Fixed source generator filtering issue in `NCborSourceGenerator.cs:398-401` to create proper context properties
 2. **Enums**: Added comprehensive enum support with all backing types, nullable enums, and Flags enums
-3. **Experimental Validation**: Successfully used the experimental validation approach in CbOrSample to validate enum implementation before automation
+3. **Experimental Validation**: Successfully used the experimental validation approach in NCborSample to validate enum implementation before automation
 
 **Implementation Quality**: Both features demonstrate the library's robust architecture:
 - Array serialization/deserialization logic was already present, requiring only proper type detection

@@ -1,4 +1,4 @@
-# CbOr Serialization Library - Strategic Roadmap
+# NCbor Serialization Library - Strategic Roadmap
 
 *Last Updated: 2025-06-23*  
 *Current Status: **v1.0 PRODUCTION READY - STRATEGIC POSITIONING COMPLETE!** 🎯*
@@ -11,7 +11,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 ## 🏛️ **Strategic Foundation - EXCELLENCE ACHIEVED**
 
-**The CbOr Serialization Library has achieved technical excellence** and occupies a **strategically perfect niche** in the .NET ecosystem. Multi-model analysis confirms our technical decisions are sound and future-aligned.
+**The NCbor Serialization Library has achieved technical excellence** and occupies a **strategically perfect niche** in the .NET ecosystem. Multi-model analysis confirms our technical decisions are sound and future-aligned.
 
 ### 🎯 **Market Position Analysis**
 **Competitive Landscape Assessment:**
@@ -26,9 +26,9 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### ✅ **Completed Features**
 
 #### Core Architecture (Phase 1) - 100% Complete ✅
-- ✅ **Source Generator**: Incremental source generator (`CbOrSourceGenerator`) that analyzes types and generates optimized serialization code
+- ✅ **Source Generator**: Incremental source generator (`NCborSourceGenerator`) that analyzes types and generates optimized serialization code
 - ✅ **AOT Compatibility**: No runtime reflection, fully compatible with Native AOT compilation
-- ✅ **System.Text.Json-like API**: Familiar developer experience with CbOrSerializer, CbOrSerializerContext, and CbOrTypeInfo<T>
+- ✅ **System.Text.Json-like API**: Familiar developer experience with NCborSerializer, NCborSerializerContext, and NCborTypeInfo<T>
 - ✅ **CBOR Integration**: Proper use of System.Formats.Cbor for underlying CBOR operations
 - ✅ **Build System**: Fixed circular dependencies and project references (December 2025)
 
@@ -47,14 +47,14 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ❌ **byte[]**: Large binary data with chunking missing (OPTIONAL for v1.0)
 
 #### Attribute System (80% Complete) ⚠️
-- ✅ **CbOrSerializableAttribute**: Mark types for source generation
-- ✅ **CbOrPropertyNameAttribute**: Custom property naming in CBOR output
-- ✅ **CbOrIgnoreAttribute**: Exclude properties from serialization (basic implementation)
-- ✅ **CbOrSourceGenerationOptionsAttribute**: Configure generation options including naming policies
-- ⚠️ **CbOrDefaultValueAttribute**: Defined but logic not fully implemented
-- ❌ **CbOrConverterAttribute**: Custom converter support missing
-- ❌ **CbOrConstructorAttribute**: Constructor-based deserialization missing
-- ❌ **CbOrIgnoreCondition**: Only 'Always' supported, missing WhenWritingNull, WhenWritingDefault
+- ✅ **NCborSerializableAttribute**: Mark types for source generation
+- ✅ **NCborPropertyNameAttribute**: Custom property naming in CBOR output
+- ✅ **NCborIgnoreAttribute**: Exclude properties from serialization (basic implementation)
+- ✅ **NCborSourceGenerationOptionsAttribute**: Configure generation options including naming policies
+- ⚠️ **NCborDefaultValueAttribute**: Defined but logic not fully implemented
+- ❌ **NCborConverterAttribute**: Custom converter support missing
+- ❌ **NCborConstructorAttribute**: Constructor-based deserialization missing
+- ❌ **NCborIgnoreCondition**: Only 'Always' supported, missing WhenWritingNull, WhenWritingDefault
 
 #### Property Naming Policies (100% Complete) ✅
 **Recent analysis confirms all naming policies are implemented and working:**
@@ -69,15 +69,15 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
 - ✅ **Comprehensive Test Suite**: **141 tests, 0 failures** (updated with Array and Enum tests)
-  - ✅ **CbOrSerializerTests** (12+ tests): Core serialization functionality
-  - ✅ **CbOrSerializerErrorTests** (20+ tests): Error handling and edge cases
-  - ✅ **CbOrExceptionTests** (23+ tests): Custom exception types and integration
-  - ✅ **CbOrDictionaryTests** (15 tests): Dictionary serialization and all scenarios
-  - ✅ **CbOrDecimalTests** (13 tests): Decimal serialization and all scenarios
-  - ✅ **CbOrArrayTests** (3 tests): Array serialization and all scenarios ⭐ **COMPLETED**
-  - ✅ **CbOrEnumTests** (5 tests): Enum serialization and all scenarios ⭐ **NEW**
-  - ✅ **CbOrGuidTests** (11 tests): GUID serialization and edge cases
-  - ✅ **CbOrDateTimeTests** (16 tests): DateTime/DateTimeOffset with timezone handling
+  - ✅ **NCborSerializerTests** (12+ tests): Core serialization functionality
+  - ✅ **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases
+  - ✅ **NCborExceptionTests** (23+ tests): Custom exception types and integration
+  - ✅ **NCborDictionaryTests** (15 tests): Dictionary serialization and all scenarios
+  - ✅ **NCborDecimalTests** (13 tests): Decimal serialization and all scenarios
+  - ✅ **NCborArrayTests** (3 tests): Array serialization and all scenarios ⭐ **COMPLETED**
+  - ✅ **NCborEnumTests** (5 tests): Enum serialization and all scenarios ⭐ **NEW**
+  - ✅ **NCborGuidTests** (11 tests): GUID serialization and edge cases
+  - ✅ **NCborDateTimeTests** (16 tests): DateTime/DateTimeOffset with timezone handling
   - ✅ **AttributeTests** (9+ tests): Attribute functionality validation
   - ✅ **SourceGeneratorTests** (10+ tests): Generated code validation
   - ✅ **Naming Policy Tests**: Individual context tests for all 7 naming policies
@@ -85,8 +85,8 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Demo Verification**: Both Demo and Sample projects run successfully
 
 #### Error Handling (100% Complete) ✅
-- ✅ **Custom Exception Types**: CbOrSerializationException, CbOrDeserializationException, CbOrValidationException with contextual information
-- ✅ **Enhanced CbOrSerializer**: Proper exception chaining with detailed error messages
+- ✅ **Custom Exception Types**: NCborException, NCborDeserializationException, NCborValidationException with contextual information
+- ✅ **Enhanced NCborSerializer**: Proper exception chaining with detailed error messages
 - ✅ **Parameter Validation**: ArgumentNullException for null inputs
 - ✅ **CBOR Format Validation**: Descriptive error messages for invalid data
 - ✅ **Source Generator Fixes**: Resolved FileNotFoundException and circular dependency issues
@@ -101,9 +101,9 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ❌ **API Reference**: Auto-generated API documentation missing
 
 #### Recent Critical Fixes (December 2025) ✅
-- ✅ **Circular Dependency Resolution**: Removed CbOrSerialization reference from generator
+- ✅ **Circular Dependency Resolution**: Removed NCbor reference from generator
 - ✅ **Project Reference Fixes**: Changed from hardcoded DLL paths to proper analyzer references
-- ✅ **Local Enum Definition**: Added CbOrKnownNamingPolicy to generator to avoid dependencies
+- ✅ **Local Enum Definition**: Added NCborKnownNamingPolicy to generator to avoid dependencies
 - ✅ **Nullable Warnings**: Added #nullable enable directive to generated code
 - ✅ **Build Success**: All 53 tests pass, all projects build and run successfully
 
@@ -120,10 +120,10 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Status**: ✅ Complete (December 20, 2025)
 - **Description**: Implemented production-ready exception types with contextual information
 - **Delivered**: 
-  - ✅ `CbOrSerializationException` for serialization failures with type information
-  - ✅ `CbOrDeserializationException` for deserialization failures with type information
-  - ✅ `CbOrValidationException` for data validation failures with property context
-  - ✅ Updated CbOrSerializer with proper exception chaining
+  - ✅ `NCborException` for serialization failures with type information
+  - ✅ `NCborDeserializationException` for deserialization failures with type information
+  - ✅ `NCborValidationException` for data validation failures with property context
+  - ✅ Updated NCborSerializer with proper exception chaining
   - ✅ 23+ comprehensive exception tests covering all scenarios
 - **Effort**: 3 hours (completed)
 - **Result**: Production-ready error handling system
@@ -159,6 +159,58 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Effort**: 4-6 hours
 - **Dependencies**: Phase 2.2 (benchmarking suite)
 - **Priority**: HIGH - Required for sustainable development
+
+## 🔍 **NEW: Analysis-Driven Improvements** (Based on Comprehensive Codebase Analysis)
+
+*Added based on detailed architectural analysis of 7,214 lines of code*
+
+### Phase 2.5: **Production Hardening & Optimization** (15-30 Days)
+**Goal**: Address analysis-identified improvement opportunities for production robustness.
+
+#### 2.5.1 Circular Reference Protection - **MEDIUM PRIORITY** 🛡️
+- **Status**: **NEW** - Identified through architectural analysis
+- **Analysis Finding**: Missing protection against self-referencing objects (stack overflow risk)
+- **Description**: Implement circular reference detection for object graph safety
+- **Current Risk**: Potential StackOverflowException on complex object graphs
+- **Deliverables**:
+  - Reference tracking during serialization traversal
+  - Configurable depth limiting (default: 64 levels)
+  - Circular reference detection with descriptive error messages
+  - Performance-optimized reference tracking (HashSet<object>)
+  - Comprehensive test coverage for circular scenarios
+- **Effort**: 8-10 hours
+- **Dependencies**: Phase 2.3 (CI/CD pipeline for regression testing)
+- **Priority**: **MEDIUM** - Production safety and reliability
+
+#### 2.5.2 Array Memory Optimization - **LOW PRIORITY** ⚡
+- **Status**: **NEW** - Identified through performance analysis
+- **Analysis Finding**: Array deserialization uses List<T> intermediary causing allocation overhead
+- **Description**: Optimize array handling for memory efficiency
+- **Current Behavior**: Uses `List<T>` then `.ToArray()` for array deserialization
+- **Optimization Target**: Direct array allocation when length is known
+- **Deliverables**:
+  - Direct array allocation for definite-length CBOR arrays
+  - Maintain List<T> fallback for indefinite-length arrays
+  - Memory allocation benchmarks showing improvement
+  - Performance regression tests
+- **Effort**: 4-6 hours
+- **Dependencies**: Phase 2.5.1 (circular reference protection)
+- **Priority**: **LOW** - Performance optimization
+
+#### 2.5.3 Streaming API Foundation - **LOW PRIORITY** 🌊
+- **Status**: **NEW** - Identified for future scalability
+- **Analysis Finding**: Missing APIs for large data scenarios and progressive processing
+- **Description**: Add streaming serialization capabilities for large objects
+- **Current Limitation**: In-memory serialization only
+- **Deliverables**:
+  - `SerializeToStream<T>()` and `DeserializeFromStream<T>()` methods
+  - Progressive serialization for large collections
+  - Memory-efficient processing of large object graphs
+  - Streaming-specific error handling
+  - Performance benchmarks for large data scenarios
+- **Effort**: 12-16 hours
+- **Dependencies**: Phase 2.5.2 (array optimization)
+- **Priority**: **LOW** - Future scalability enhancement
 
 ### Phase 3: **ECOSYSTEM INTEGRATION & ADOPTION** (30-60 Days)
 **Goal**: Position library for widespread adoption through excellent developer experience and public availability.
@@ -205,7 +257,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Performance**: Efficient serialization using direct numeric casting and type-safe deserialization
 - ✅ **Test Coverage**: 5 comprehensive tests covering all enum scenarios
 - ✅ **Round-trip Integrity**: Perfect data preservation through serialization/deserialization cycles
-- ✅ **Experimental Validation**: Successfully validated approach in CbOrSample before automation
+- ✅ **Experimental Validation**: Successfully validated approach in NCborSample before automation
 
 **🎉 Dictionary<K,V> Implementation Details:**
 - ✅ **Full Dictionary Support**: Comprehensive `Dictionary<TKey, TValue>` serialization and deserialization
@@ -219,13 +271,13 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 #### 3.2 Custom Converter Interface
 - **Status**: Planned
-- **Description**: Implement `ICbOrConverter<T>` interface for extensibility
+- **Description**: Implement `INCborConverter<T>` interface for extensibility
 - **Current**: No custom converter support
 - **Deliverables**:
-  - `ICbOrConverter<T>` interface definition
+  - `INCborConverter<T>` interface definition
   - Built-in converter implementations for complex types
   - Source generator integration for custom converters
-  - `CbOrConverterAttribute` implementation
+  - `NCborConverterAttribute` implementation
 - **Effort**: 6-8 hours
 - **Dependencies**: Phase 3.1 (core types)
 - **Priority**: MEDIUM - Enables advanced scenarios
@@ -236,15 +288,15 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Status**: Partially implemented
 - **Description**: Complete implementation of all defined attributes
 - **Current Status**:
-  - ✅ `CbOrSerializableAttribute` - Complete
-  - ✅ `CbOrPropertyNameAttribute` - Complete  
-  - ✅ `CbOrIgnoreAttribute` - Basic implementation (Always only)
-  - ⚠️ `CbOrDefaultValueAttribute` - Defined but logic missing
-  - ❌ `CbOrConverterAttribute` - Not implemented
-  - ❌ `CbOrConstructorAttribute` - Not implemented
+  - ✅ `NCborSerializableAttribute` - Complete
+  - ✅ `NCborPropertyNameAttribute` - Complete  
+  - ✅ `NCborIgnoreAttribute` - Basic implementation (Always only)
+  - ⚠️ `NCborDefaultValueAttribute` - Defined but logic missing
+  - ❌ `NCborConverterAttribute` - Not implemented
+  - ❌ `NCborConstructorAttribute` - Not implemented
 - **Missing Features**:
-  - `CbOrIgnoreCondition.WhenWritingNull` logic
-  - `CbOrIgnoreCondition.WhenWritingDefault` logic  
+  - `NCborIgnoreCondition.WhenWritingNull` logic
+  - `NCborIgnoreCondition.WhenWritingDefault` logic  
   - Default value detection and skipping during serialization
   - Constructor-based deserialization support
 - **Effort**: 6-8 hours
@@ -256,7 +308,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Description**: Support for immutable types with constructor-based deserialization
 - **Current**: Property-based deserialization only
 - **Features**:
-  - `CbOrConstructorAttribute` implementation
+  - `NCborConstructorAttribute` implementation
   - Parameter name matching with properties/fields
   - Support for records and immutable classes
   - Constructor parameter validation
@@ -354,18 +406,44 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Dependencies**: Phase 6.1 (polymorphic serialization)
 - **Priority**: LOW - CBOR specification completeness
 
-#### 6.3 Circular Reference Detection
-- **Status**: Future consideration
-- **Description**: Handle circular references in object graphs
-- **Current**: No circular reference protection
+#### 6.3 Circular Reference Detection - **MOVED TO PHASE 2** ⬆️
+- **Status**: **ELEVATED TO MEDIUM PRIORITY** based on comprehensive analysis
+- **Description**: Handle circular references in object graphs  
+- **Current**: No circular reference protection (potential stack overflow risk identified)
+- **Analysis Finding**: Medium priority security/reliability concern for production use
 - **Features**:
   - Reference tracking during serialization
-  - Configurable depth limiting
+  - Configurable depth limiting  
   - Circular reference detection and prevention
   - Reference preservation options
 - **Effort**: 10-12 hours
-- **Dependencies**: Phase 6.2 (advanced CBOR)
-- **Priority**: LOW - Complex object graph scenarios
+- **Dependencies**: Phase 2.3 (CI/CD pipeline)
+- **Priority**: **MEDIUM** - Production safety requirement
+
+---
+
+## 🔍 **Analysis Impact Summary**
+
+*Based on comprehensive architectural analysis of NCbor codebase*
+
+### **Key Analysis Findings**
+- ✅ **Excellent Architecture**: Source generation approach follows modern .NET patterns perfectly
+- ✅ **High Code Quality**: 7,214 lines with minimal technical debt, comprehensive test coverage
+- ✅ **Strong Performance Foundation**: Efficient generated code with direct method dispatch
+- ⚠️ **Production Hardening Needed**: Circular reference detection identified as medium priority
+- 🔧 **Optimization Opportunities**: Array memory allocation and streaming APIs for future enhancement
+
+### **Strategic Adjustments Made**
+1. **Elevated Circular Reference Protection** from Phase 6 to Phase 2.5 (Medium Priority)
+2. **Added Production Hardening Phase** (2.5) addressing analysis findings
+3. **Structured Improvement Roadmap** with specific effort estimates and dependencies
+4. **Enhanced Risk Management** with stack overflow protection for complex object graphs
+
+### **Analysis Validation**
+- **Architecture**: ✅ Production-ready design following System.Text.Json patterns
+- **Performance**: ✅ Zero-reflection AOT approach with excellent performance characteristics  
+- **Maintainability**: ✅ Clean separation, extensible patterns, minimal technical debt
+- **Strategic Position**: ✅ Excellent market positioning as "System.Text.Json for CBOR"
 
 ---
 
@@ -427,6 +505,13 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
    - **Technical**: API reference, performance documentation, migration guides
    - **Deliverable**: Documentation worthy of market leadership position
 
+#### **NEW PRIORITY 3: Production Hardening** 🛡️ *(Analysis-Driven)*
+4. **🎯 Circular Reference Protection** (Phase 2.5.1) - **8-10 hours** ⚠️ **MEDIUM PRIORITY**
+   - **Analysis Finding**: Stack overflow risk identified in object graph traversal
+   - **Production Impact**: Critical for enterprise and complex application scenarios
+   - **Technical**: Reference tracking with configurable depth limiting
+   - **Deliverable**: Production-safe object graph serialization
+
 ### **IMMEDIATE COMPLETED FOUNDATIONS** ✅
 - ✅ **Enhanced Error Handling** (Phase 2.1) - **COMPLETED** ⭐
 - ✅ **DateTime & Guid Support** (Phase 3.1) - **COMPLETED** ⭐  
@@ -445,12 +530,12 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 #### **PRIORITY 2: Developer Experience Excellence** 🎨
 2. **🎯 Complete Attribute Implementation** (Phase 4.1) - **6-8 hours**
    - **Developer Value**: Professional-grade attribute system
-   - **Technical**: CbOrDefaultValueAttribute, CbOrIgnoreCondition enhancements
+   - **Technical**: NCborDefaultValueAttribute, NCborIgnoreCondition enhancements
    - **Market Position**: Feature parity with System.Text.Json patterns
 
 3. **🎯 Custom Converter Interface** (Phase 3.2) - **6-8 hours**
    - **Strategic Value**: Extensibility for complex scenarios
-   - **Technical**: ICbOrConverter<T> implementation
+   - **Technical**: INCborConverter<T> implementation
    - **Adoption Enabler**: Handles edge cases that drive adoption
 
 ### **PHASE 3: ECOSYSTEM LEADERSHIP** (30-60 Days)
@@ -595,7 +680,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 ### **🏆 EXCEPTIONAL STRATEGIC POSITION ACHIEVED**
 
-Based on comprehensive multi-model analysis, the CbOr Serialization Library has achieved an **exceptional strategic position** in the .NET ecosystem:
+Based on comprehensive multi-model analysis, the NCbor Serialization Library has achieved an **exceptional strategic position** in the .NET ecosystem:
 
 **🎯 Perfect Market Niche**: Occupying the "System.Text.Json for CBOR" position with clear competitive advantages
 

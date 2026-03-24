@@ -5,6 +5,11 @@ internal static class SerializationCodeGenerator
     public static string GenerateSerializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this")
     {
         var builder = new StringBuilder();
+        if (IsByteArray(typeSymbol))
+        {
+            builder.AppendLine("writer.WriteByteString(value);");
+            return builder.ToString();
+        }
         if (IsList(typeSymbol, out var elementType))
         {
             if (elementType == null)
@@ -102,6 +107,11 @@ internal static class SerializationCodeGenerator
     public static string GenerateDeserializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this")
     {
         var builder = new StringBuilder();
+        if (IsByteArray(typeSymbol))
+        {
+            builder.AppendLine("return reader.ReadByteString();");
+            return builder.ToString();
+        }
         if (IsList(typeSymbol, out var elementType))
         {
             if (elementType == null)
@@ -253,7 +263,17 @@ internal static class SerializationCodeGenerator
     private static string GeneratePropertySerialization(IPropertySymbol property)
     {
         var type = property.Type;
-        
+
+        // Handle byte[] / byte[]? as CBOR byte string (major type 2)
+        if (IsByteArray(type))
+        {
+            if (type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
+            {
+                return $"if (value.{property.Name} != null) {{ writer.WriteByteString(value.{property.Name}); }} else {{ writer.WriteNull(); }}";
+            }
+            return $"writer.WriteByteString(value.{property.Name});";
+        }
+
         // Handle built-in types directly
         if (IsBuiltInType(type))
         {
@@ -303,7 +323,17 @@ internal static class SerializationCodeGenerator
     private static string GeneratePropertyDeserialization(IPropertySymbol property)
     {
         var type = property.Type;
-        
+
+        // Handle byte[] / byte[]? as CBOR byte string (major type 2)
+        if (IsByteArray(type))
+        {
+            if (type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
+            {
+                return "reader.PeekState() == CborReaderState.Null ? ReadNullValue<byte[]>(reader) : reader.ReadByteString()";
+            }
+            return "reader.ReadByteString()";
+        }
+
         // Handle built-in types directly
         if (IsBuiltInType(type))
         {
@@ -391,6 +421,11 @@ internal static class SerializationCodeGenerator
             return true;
         }
         return false;
+    }
+
+    private static bool IsByteArray(ITypeSymbol typeSymbol)
+    {
+        return typeSymbol is IArrayTypeSymbol arrayType && arrayType.ElementType.SpecialType == SpecialType.System_Byte;
     }
 
     private static string GetPropertyNameFromType(ITypeSymbol typeSymbol)

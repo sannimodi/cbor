@@ -390,7 +390,13 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
 
     private static bool IsBuiltInType(ITypeSymbol typeSymbol)
     {
-        // Arrays are NOT built-in types - they need context properties
+        // byte[] is a built-in type - uses CBOR byte string directly, no context property needed
+        if (typeSymbol is IArrayTypeSymbol arrayType && arrayType.ElementType.SpecialType == SpecialType.System_Byte)
+        {
+            return true;
+        }
+
+        // Other arrays are NOT built-in types - they need context properties
         if (typeSymbol is IArrayTypeSymbol)
         {
             return false;

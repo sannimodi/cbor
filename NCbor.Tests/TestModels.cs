@@ -133,6 +133,14 @@ public class MixedArrayModel
     public SimpleModel[]? OptionalModels { get; set; }
 }
 
+// Byte array test models
+public class ByteArrayModel
+{
+    public byte[] Data { get; set; } = [];
+    public byte[]? OptionalData { get; set; }
+    public string Name { get; set; } = string.Empty;
+}
+
 // Enum test models
 public enum UserRole
 {
@@ -197,6 +205,7 @@ public class EnumModel
 [NCborSerializable(typeof(ArrayModel))]
 [NCborSerializable(typeof(NullableArrayModel))]
 [NCborSerializable(typeof(MixedArrayModel))]
+[NCborSerializable(typeof(ByteArrayModel))]
 [NCborSerializable(typeof(EnumModel))]
 [NCborSerializable(typeof(List<SimpleModel>))]
 [NCborSerializable(typeof(List<string>))]

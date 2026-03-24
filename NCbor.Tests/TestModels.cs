@@ -221,6 +221,7 @@ public class EnumModel
 [NCborSerializable(typeof(int[]))]
 [NCborSerializable(typeof(double[]))]
 [NCborSerializable(typeof(SimpleModel[]))]
+[NCborSerializable(typeof(byte[]))]
 public partial class TestNCborContext : NCborSerializerContext
 {
 }

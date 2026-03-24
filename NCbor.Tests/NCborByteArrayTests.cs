@@ -111,4 +111,15 @@ public class NCborByteArrayTests
         // not 1 byte per element like an integer array would be
         bytes.Length.Should().BeLessThan(50);
     }
+
+    [Fact]
+    public void SerializeByteArray_StandaloneViaContext_ShouldSucceed()
+    {
+        var data = new byte[] { 0x01, 0x02, 0x03, 0xFE, 0xFF };
+
+        var bytes = NCborSerializer.Serialize(data, _context.ArrayOfByte);
+        var deserialized = NCborSerializer.Deserialize(bytes, _context.ArrayOfByte);
+
+        deserialized.Should().BeEquivalentTo(data);
+    }
 }

@@ -1,23 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(export PATH=\"$HOME/.dotnet:$PATH\")",
-      "Bash(dotnet build:*)",
-      "Bash(dotnet clean:*)",
-      "Bash(find:*)",
-      "Bash(mv:*)",
-      "Bash(rg:*)",
-      "Bash(grep:*)",
-      "Bash(ls:*)",
-      "Bash(python3:*)",
-      "Bash(dotnet test:*)",
-      "Bash(dotnet run)",
-      "WebFetch(domain:www.rfc-editor.org)",
-      "Bash(export PATH=\"$PATH:/home/ubuntu/.dotnet\")",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "WebFetch(domain:docs.anthropic.com)"
+      "Bash(find:*)"
     ],
-    "deny": []
+    "defaultMode": "bypassPermissions"
   }
 }

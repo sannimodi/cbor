@@ -32,7 +32,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 - ✅ Support for .NET primitive types and collections
 - ✅ Efficient binary serialization with CBOR compliance
 - ✅ Native AOT support and trimming-friendly
-- ✅ Comprehensive test suite (141 tests, 0 failures)
+- ✅ Comprehensive test suite (148 tests, 0 failures)
 - ✅ Full nullable type support
 - ✅ Rich attribute system (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ 7 naming policies (CamelCase, SnakeCase, KebabCase, etc.)
@@ -50,7 +50,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 │   ├── CborSourceGenerator.cs      # Incremental source generator
 │   └── SerializationCodeGenerator.cs # Code generation logic
 │
-├── NCbor.Tests/       # Comprehensive test suite (133 tests)
+├── NCbor.Tests/       # Comprehensive test suite (148 tests)
 │   ├── CborSerializerTests.cs      # Core serialization tests
 │   ├── CborSerializerErrorTests.cs # Error handling tests
 │   ├── NCborDictionaryTests.cs      # Dictionary serialization tests
@@ -158,7 +158,7 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 - **Maintainability**: ✅ **Excellent** - Clear separation of concerns, follows .NET patterns
 - **Extensibility**: ✅ **High** - Easy to add new types using established patterns  
 - **Performance**: ✅ **Optimized** - Efficient generated code with minimal allocations
-- **Testability**: ✅ **Comprehensive** - 141 tests covering all scenarios
+- **Testability**: ✅ **Comprehensive** - 148 tests covering all scenarios
 - **Technical Debt**: ✅ **Minimal** - No TODO/HACK/FIXME markers found in codebase
 
 ### 🔧 **Implementation Excellence**
@@ -200,8 +200,9 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
   - ✅ DateTime/DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601)
   - ✅ System.Guid with 16-byte binary format
   - ✅ Collections (List<T>, Dictionary<K,V>) with nested support
-  - ✅ Arrays (T[]) with nullable support ⭐ **COMPLETE**
-  - ✅ Enums with all backing types, nullable enums, Flags support ⭐ **NEWLY COMPLETE**
+  - ✅ Arrays (T[]) with nullable support
+  - ✅ byte[] with native CBOR byte string encoding (major type 2)
+  - ✅ Enums with all backing types, nullable enums, Flags support
   - ✅ Custom classes and structs
   - ✅ Nullable types (T?, Dictionary<K,V>?, T[]?, Enum?) with auto-generated helpers
   - ✅ Complex nested object hierarchies
@@ -234,8 +235,9 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 - **DateTime Types**: DateTime, DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601), UTC handling, timezone preservation
 - **GUID**: System.Guid with efficient 16-byte binary format
 - **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
-- **Arrays**: T[] (string[], int[], SimpleModel[]) with efficient serialization and nullable array support ⭐ **COMPLETE**
-- **Enums**: Complete enum support with all backing types (int, byte, sbyte, etc.), nullable enums, and Flags enums ⭐ **NEWLY COMPLETE**
+- **Arrays**: T[] (string[], int[], SimpleModel[]) with efficient serialization and nullable array support
+- **byte[]**: Native CBOR byte string encoding (major type 2) for compact binary data
+- **Enums**: Complete enum support with all backing types (int, byte, sbyte, etc.), nullable enums, and Flags enums
 - **Custom classes and structs** with source generation
 - **Nullable types** (int?, bool?, decimal?, DateTime?, Guid?, etc.) with auto-generated helper methods
 - **Nested objects** and complex type hierarchies
@@ -249,7 +251,6 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 - **AOT App Size Comparison** - Showing trimming benefits
 
 ### 📈 **Optional Enhancements (v1.1+)**
-- Large binary data (byte[]) with chunking support
 - Custom converter interface (INCborConverter<T>)
 - Advanced attribute features (NCborDefaultValue logic)
 - **Public Benchmark Results** - Quantified performance advantages
@@ -287,7 +288,7 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (141 tests)
+# Run the comprehensive test suite (148 tests)
 dotnet test NCbor.Tests/
 
 # Run the demo
@@ -296,15 +297,16 @@ dotnet run --project NCbor.Demo/
 
 ## Test Results
 
-The library includes a comprehensive test suite with **141 tests, 0 failures**:
+The library includes a comprehensive test suite with **148 tests, 0 failures**:
 
 - **NCborSerializerTests** (12+ tests): Core serialization functionality
 - **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases  
 - **NCborExceptionTests** (23+ tests): Custom exception types and integration
 - **NCborDictionaryTests** (15 tests): Dictionary serialization and all scenarios
 - **NCborDecimalTests** (13 tests): Decimal serialization and all scenarios
-- **NCborArrayTests** (15 tests): Array serialization and all scenarios ⭐ **COMPLETE**
-- **NCborEnumTests** (5 tests): Enum serialization and all scenarios ⭐ **NEWLY COMPLETE**
+- **NCborArrayTests** (3 tests): Array serialization and all scenarios
+- **NCborByteArrayTests** (7 tests): byte[] native CBOR byte string support
+- **NCborEnumTests** (5 tests): Enum serialization and all scenarios
 - **NCborGuidTests** (11 tests): GUID serialization and edge cases
 - **NCborDateTimeTests** (16 tests): DateTime/DateTimeOffset with timezone handling
 - **AttributeTests** (9+ tests): Attribute functionality validation

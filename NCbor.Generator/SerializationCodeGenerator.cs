@@ -2,7 +2,7 @@ namespace NCbor.Generator;
 
 internal static class SerializationCodeGenerator
 {
-    public static string GenerateSerializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this")
+    public static string GenerateSerializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this", NCborIgnoreCondition defaultIgnoreCondition = NCborIgnoreCondition.Never)
     {
         var builder = new StringBuilder();
         if (IsByteArray(typeSymbol))
@@ -91,13 +91,13 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("writer.WriteEndMap();");
             return builder.ToString();
         }
-        var properties = GetSerializableProperties(typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties"));
+        var properties = GetSerializableProperties(typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties"), defaultIgnoreCondition);
         builder.AppendLine("writer.WriteStartMap(null);");
         foreach (var property in properties)
         {
             var propertyName = GetPropertyName(property, namingPolicy);
             var body = $"writer.WriteTextString(\"{propertyName}\");\n{GeneratePropertySerialization(property)}";
-            var writeGuard = GetWriteGuard(property);
+            var writeGuard = GetWriteGuard(property, defaultIgnoreCondition);
             if (writeGuard != null)
             {
                 builder.AppendLine($"if ({writeGuard})");
@@ -114,7 +114,7 @@ internal static class SerializationCodeGenerator
         return builder.ToString();
     }
 
-    public static string GenerateDeserializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this")
+    public static string GenerateDeserializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this", NCborIgnoreCondition defaultIgnoreCondition = NCborIgnoreCondition.Never)
     {
         var builder = new StringBuilder();
         if (IsByteArray(typeSymbol))
@@ -219,7 +219,7 @@ internal static class SerializationCodeGenerator
             return builder.ToString();
         }
         var namedType = typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties");
-        var properties = GetSerializableProperties(namedType).ToList();
+        var properties = GetSerializableProperties(namedType, defaultIgnoreCondition).ToList();
         var constructor = GetDeserializationConstructor(namedType);
 
         if (constructor != null)
@@ -294,14 +294,14 @@ internal static class SerializationCodeGenerator
         return builder.ToString();
     }
 
-    private static IEnumerable<IPropertySymbol> GetSerializableProperties(INamedTypeSymbol typeSymbol)
+    private static IEnumerable<IPropertySymbol> GetSerializableProperties(INamedTypeSymbol typeSymbol, NCborIgnoreCondition defaultIgnoreCondition)
     {
         var constructor = GetDeserializationConstructor(typeSymbol);
         return typeSymbol.GetMembers()
             .OfType<IPropertySymbol>()
             .Where(p => !p.IsStatic && p.GetMethod != null)
             .Where(p => p.SetMethod != null || (constructor != null && FindMatchingParameter(constructor, p) != null))
-            .Where(p => !IsAlwaysIgnored(p));
+            .Where(p => !IsAlwaysIgnored(p, defaultIgnoreCondition));
     }
 
     /// <summary>
@@ -328,20 +328,46 @@ internal static class SerializationCodeGenerator
         return properties.FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Returns get-only properties that will be silently excluded from serialization: no public
+    /// setter, and (if the type has a <c>[NCborConstructor]</c>-marked constructor) not matched
+    /// to any of its parameters either. Used by the generator to emit a usage diagnostic instead
+    /// of dropping the property with no signal at all.
+    /// </summary>
+    public static IEnumerable<IPropertySymbol> GetUncoveredGetOnlyProperties(INamedTypeSymbol typeSymbol, NCborIgnoreCondition defaultIgnoreCondition)
+    {
+        // Only "plain object" types go through property-based dispatch at all; collections,
+        // byte[], and built-ins are serialized by iterating elements/values, so their own
+        // (often get-only) BCL properties like List<T>.Count are never a serialization target
+        // and would otherwise be false positives here.
+        if (IsByteArray(typeSymbol) || IsList(typeSymbol, out _) || IsArray(typeSymbol, out _) ||
+            IsDictionary(typeSymbol, out _, out _) || IsBuiltInType(typeSymbol))
+        {
+            return Enumerable.Empty<IPropertySymbol>();
+        }
+
+        var constructor = GetDeserializationConstructor(typeSymbol);
+        return typeSymbol.GetMembers()
+            .OfType<IPropertySymbol>()
+            .Where(p => !p.IsStatic && p.GetMethod != null && p.SetMethod == null)
+            // Already-Always-ignored properties (own attribute or context default) are excluded
+            // deliberately, not silently — no diagnostic needed for those.
+            .Where(p => !IsAlwaysIgnored(p, defaultIgnoreCondition))
+            .Where(p => constructor == null || FindMatchingParameter(constructor, p) == null);
+    }
+
     private static AttributeData? GetIgnoreAttribute(IPropertySymbol property)
     {
         return property.GetAttributes()
             .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborIgnoreAttribute");
     }
 
-    private static bool IsAlwaysIgnored(IPropertySymbol property)
+    private static bool IsAlwaysIgnored(IPropertySymbol property, NCborIgnoreCondition defaultIgnoreCondition)
     {
         var ignoreAttr = GetIgnoreAttribute(property);
-        if (ignoreAttr == null)
-            return false;
-
-        // A bare [NCborIgnore] (no Condition set) defaults to Always, same as the runtime attribute's default.
-        return GetIgnoreCondition(ignoreAttr) == NCborIgnoreCondition.Always;
+        // No explicit [NCborIgnore]: fall back to the context-wide default condition.
+        var effectiveCondition = ignoreAttr != null ? GetIgnoreCondition(ignoreAttr) : defaultIgnoreCondition;
+        return effectiveCondition == NCborIgnoreCondition.Always;
     }
 
     /// <summary>
@@ -374,7 +400,7 @@ internal static class SerializationCodeGenerator
     /// Returns a C# boolean expression that must be true for the property's key/value pair to
     /// be written, or null if the property should always be written unconditionally.
     /// </summary>
-    private static string? GetWriteGuard(IPropertySymbol property)
+    private static string? GetWriteGuard(IPropertySymbol property, NCborIgnoreCondition defaultIgnoreCondition)
     {
         var defaultValueAttr = property.GetAttributes()
             .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborDefaultValueAttribute");
@@ -386,10 +412,8 @@ internal static class SerializationCodeGenerator
         }
 
         var ignoreAttr = GetIgnoreAttribute(property);
-        if (ignoreAttr == null)
-            return null;
-
-        var condition = GetIgnoreCondition(ignoreAttr);
+        // No explicit [NCborIgnore] on the property: fall back to the context-wide default.
+        var condition = ignoreAttr != null ? GetIgnoreCondition(ignoreAttr) : defaultIgnoreCondition;
         var typeDisplayName = property.Type.ToDisplayString();
         switch (condition)
         {

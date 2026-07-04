@@ -219,6 +219,15 @@ public class ConverterModel
     public DateTime Timestamp { get; set; }
 }
 
+public class DefaultIgnoreConditionModel
+{
+    public string Name { get; set; } = string.Empty;
+    public int Count { get; set; }
+
+    [NCborIgnore(Condition = NCborIgnoreCondition.Never)]
+    public int AlwaysIncluded { get; set; }
+}
+
 public class ImmutablePerson
 {
     [NCborConstructor]

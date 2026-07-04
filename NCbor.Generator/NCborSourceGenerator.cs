@@ -50,6 +50,27 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             if (!serializableAttributes.Any())
                 continue;
 
+            // Warn about get-only properties that will be silently dropped from serialization
+            // (no setter, and not covered by a [NCborConstructor] parameter if one exists).
+            var contextDefaultIgnoreCondition = GetDefaultIgnoreCondition(typeSymbol);
+            foreach (var attr in serializableAttributes)
+            {
+                if (attr.ConstructorArguments.Length == 0)
+                    continue;
+                if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol registeredType)
+                    continue;
+
+                foreach (var uncovered in SerializationCodeGenerator.GetUncoveredGetOnlyProperties(registeredType, contextDefaultIgnoreCondition))
+                {
+                    var location = uncovered.Locations.FirstOrDefault() ?? Location.None;
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor("CBOR005", "NCbor Generator",
+                            "Property '{0}' on type '{1}' has no public setter and is not covered by a [NCborConstructor] parameter — it will be silently excluded from serialization. Add a setter, cover it in the constructor, or mark it [NCborIgnore] if intentional.",
+                            "Usage", DiagnosticSeverity.Warning, true),
+                        location, uncovered.Name, registeredType.Name));
+                }
+            }
+
             // Diagnostic: found context class
             context.ReportDiagnostic(Diagnostic.Create(
                 new DiagnosticDescriptor("CBOR003", "NCbor Generator", "Generating context for {0}", "Debug", DiagnosticSeverity.Info, true),
@@ -75,6 +96,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         var builder = new StringBuilder();
         var namingPolicy = GetNamingPolicy(contextType);
         var maxDepth = GetMaxDepth(contextType);
+        var defaultIgnoreCondition = GetDefaultIgnoreCondition(contextType);
         var namespaceName = contextType.ContainingNamespace.IsGlobalNamespace ? null : contextType.ContainingNamespace.ToDisplayString();
 
         // Add diagnostic comment
@@ -219,13 +241,13 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             builder.AppendLine($"        public override void Serialize(CborWriter writer, {typeName} value, int depth = 0)");
             builder.AppendLine("        {");
             builder.AppendLine($"            if (depth > {maxDepth}) throw new NCborSerializationException(typeof({typeName}), \"Maximum serialization depth ({maxDepth}) exceeded at depth \" + depth + \". This usually indicates a circular reference; increase NCborSourceGenerationOptionsAttribute.MaxDepth if the object graph is intentionally this deep.\");");
-            builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol, namingPolicy, "_context"));
+            builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol, namingPolicy, "_context", defaultIgnoreCondition));
             builder.AppendLine("        }");
             builder.AppendLine();
             builder.AppendLine($"        public override {typeName} Deserialize(CborReader reader, int depth = 0)");
             builder.AppendLine("        {");
             builder.AppendLine($"            if (depth > {maxDepth}) throw new NCborDeserializationException(typeof({typeName}), \"Maximum deserialization depth ({maxDepth}) exceeded at depth \" + depth + \". The CBOR data may be malformed or unexpectedly deep; increase NCborSourceGenerationOptionsAttribute.MaxDepth if intentional.\");");
-            builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol, namingPolicy, "_context"));
+            builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol, namingPolicy, "_context", defaultIgnoreCondition));
             builder.AppendLine("        }");
             builder.AppendLine("    }");
             builder.AppendLine();
@@ -479,5 +501,27 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
 
         // Matches NCborSourceGenerationOptionsAttribute.MaxDepth's default.
         return 64;
+    }
+
+    private static NCborIgnoreCondition GetDefaultIgnoreCondition(INamedTypeSymbol contextType)
+    {
+        var attr = contextType.GetAttributes()
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "NCbor.NCborSourceGenerationOptionsAttribute");
+
+        if (attr != null)
+        {
+            foreach (var arg in attr.NamedArguments)
+            {
+                if (arg.Key == "DefaultIgnoreCondition" && arg.Value.Value is int val)
+                    return (NCborIgnoreCondition)val;
+            }
+        }
+
+        // NCborSourceGenerationOptionsAttribute.DefaultIgnoreCondition has no field initializer,
+        // so its C# default is enum value 0 (Always) purely from member ordering — NOT a safe
+        // "unset" fallback (that would silently exclude every unattributed property). When the
+        // named argument isn't present at all, fall back to Never instead, matching
+        // System.Text.Json's actual default behavior.
+        return NCborIgnoreCondition.Never;
     }
 }

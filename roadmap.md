@@ -50,15 +50,15 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Nested Objects**: Complex type hierarchies and object graphs
 - ✅ **byte[]**: Native CBOR byte string encoding (major type 2) with nullable support ⭐ **COMPLETED**
 
-#### Attribute System (80% Complete) ⚠️
+#### Attribute System (85% Complete) ⚠️
 - ✅ **NCborSerializableAttribute**: Mark types for source generation
 - ✅ **NCborPropertyNameAttribute**: Custom property naming in CBOR output
-- ✅ **NCborIgnoreAttribute**: Exclude properties from serialization (basic implementation)
-- ✅ **NCborSourceGenerationOptionsAttribute**: Configure generation options including naming policies
-- ⚠️ **NCborDefaultValueAttribute**: Defined but logic not fully implemented
+- ✅ **NCborIgnoreAttribute**: Exclude properties from serialization, all four `NCborIgnoreCondition` values honored (fixed 2026-07-04)
+- ✅ **NCborSourceGenerationOptionsAttribute**: Configure generation options including naming policies and `MaxDepth`; `DefaultIgnoreCondition` still unread (see [GAPS.md](GAPS.md) GAP-13)
+- ✅ **NCborDefaultValueAttribute**: Fixed 2026-07-04 — property omitted from the map when its value equals the declared default
 - ❌ **NCborConverterAttribute**: Custom converter support missing
 - ❌ **NCborConstructorAttribute**: Constructor-based deserialization missing
-- ❌ **NCborIgnoreCondition**: Only 'Always' supported, missing WhenWritingNull, WhenWritingDefault
+- ✅ **NCborIgnoreCondition**: `Always`, `Never`, `WhenWritingDefault`, `WhenWritingNull` all implemented (fixed 2026-07-04)
 
 #### Property Naming Policies (100% Complete) ✅
 **Recent analysis confirms all naming policies are implemented and working:**
@@ -72,7 +72,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **152 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
+- ✅ **Comprehensive Test Suite**: **159 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
   - ✅ **NCborSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **NCborExceptionTests** (23+ tests): Custom exception types and integration
@@ -296,22 +296,21 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 ### Phase 4: Advanced Attribute Features (Medium Priority)
 
-#### 4.1 Complete Attribute Implementation 
-- **Status**: Partially implemented
+#### 4.1 Complete Attribute Implementation - ⚠️ **MOSTLY COMPLETE** (updated 2026-07-04)
+- **Status**: Partially implemented — the ignore-condition/default-value half is done, converters/constructors remain
 - **Description**: Complete implementation of all defined attributes
 - **Current Status**:
   - ✅ `NCborSerializableAttribute` - Complete
   - ✅ `NCborPropertyNameAttribute` - Complete  
-  - ✅ `NCborIgnoreAttribute` - Basic implementation (Always only)
-  - ⚠️ `NCborDefaultValueAttribute` - Defined but logic missing
-  - ❌ `NCborConverterAttribute` - Not implemented
-  - ❌ `NCborConstructorAttribute` - Not implemented
-- **Missing Features**:
-  - `NCborIgnoreCondition.WhenWritingNull` logic
-  - `NCborIgnoreCondition.WhenWritingDefault` logic  
-  - Default value detection and skipping during serialization
+  - ✅ `NCborIgnoreAttribute` - Complete (all four `NCborIgnoreCondition` values honored)
+  - ✅ `NCborDefaultValueAttribute` - Complete (property omitted when value equals declared default)
+  - ❌ `NCborConverterAttribute` - Not implemented (see [GAPS.md](GAPS.md) GAP-4)
+  - ❌ `NCborConstructorAttribute` - Not implemented (see [GAPS.md](GAPS.md) GAP-5)
+- **Remaining Features**:
+  - Custom converter interface (`INCborConverter<T>`) and generator wiring
   - Constructor-based deserialization support
-- **Effort**: 6-8 hours
+  - `NCborSourceGenerationOptionsAttribute.DefaultIgnoreCondition` (context-wide default, still unread — [GAPS.md](GAPS.md) GAP-13)
+- **Effort remaining**: ~14-18 hours (GAP-4 + GAP-5 + GAP-13, see GAPS.md)
 - **Dependencies**: Phase 3.1 (core types)
 - **Priority**: MEDIUM - Production-grade attribute system
 
@@ -464,9 +463,9 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### Feature Completion by Category
 - **Core Architecture**: ✅ **100%** (4/4 components complete + build fixes)
 - **Type Support**: ✅ **100%** (All critical types complete - DateTime, GUID, primitives, collections, Dictionary, Arrays, Enums)
-- **Attribute System**: ⚠️ **65%** (4/7 attributes fully implemented)
+- **Attribute System**: ⚠️ **85%** (6/7 attribute mechanisms fully implemented; converter + constructor attributes remain)
 - **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
-- **Testing**: ✅ **100%** (152 tests covering all implemented features)
+- **Testing**: ✅ **100%** (159 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
@@ -591,7 +590,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **AOT Compatibility**: Zero runtime reflection, fully compatible with Native AOT compilation
 - ✅ **API Design**: Clean, familiar API following System.Text.Json patterns exactly
 - ✅ **Build System**: Resolved complex circular dependency issues with proper project references
-- ✅ **Quality Assurance**: 152 comprehensive tests with 100% pass rate
+- ✅ **Quality Assurance**: 159 comprehensive tests with 100% pass rate
 
 ### Production Readiness Indicators ✅
 - ✅ **Functional Demo**: Working serialization of complex object graphs and collections
@@ -639,7 +638,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### **🎯 Success Metrics & KPIs**
 
 **Technical Excellence**:
-- ✅ 152 tests passing (achieved)
+- ✅ 159 tests passing (achieved)
 - ✅ Zero reflection architecture (achieved)
 - 🎯 <5% performance overhead vs hand-written code (target)
 
@@ -687,7 +686,7 @@ Based on comprehensive multi-model analysis, the NCbor Serialization Library has
 
 **🎯 Perfect Market Niche**: Occupying the "System.Text.Json for CBOR" position with clear competitive advantages
 
-**⚡ Technical Excellence**: 99% feature complete with 152 passing tests, zero reflection architecture
+**⚡ Technical Excellence**: 99% feature complete with 159 passing tests, zero reflection architecture
 
 **🚀 Future-Aligned**: Source generation approach follows Microsoft's AOT evolution direction
 

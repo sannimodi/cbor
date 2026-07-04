@@ -96,9 +96,19 @@ internal static class SerializationCodeGenerator
         foreach (var property in properties)
         {
             var propertyName = GetPropertyName(property, namingPolicy);
-            var propertyType = property.Type;
-            builder.AppendLine($"writer.WriteTextString(\"{propertyName}\");");
-            builder.AppendLine(GeneratePropertySerialization(property));
+            var body = $"writer.WriteTextString(\"{propertyName}\");\n{GeneratePropertySerialization(property)}";
+            var writeGuard = GetWriteGuard(property);
+            if (writeGuard != null)
+            {
+                builder.AppendLine($"if ({writeGuard})");
+                builder.AppendLine("{");
+                builder.AppendLine(body);
+                builder.AppendLine("}");
+            }
+            else
+            {
+                builder.AppendLine(body);
+            }
         }
         builder.AppendLine("writer.WriteEndMap();");
         return builder.ToString();
@@ -238,13 +248,94 @@ internal static class SerializationCodeGenerator
         return typeSymbol.GetMembers()
             .OfType<IPropertySymbol>()
             .Where(p => !p.IsStatic && p.GetMethod != null && p.SetMethod != null)
-            .Where(p => !HasIgnoreAttribute(p));
+            .Where(p => !IsAlwaysIgnored(p));
     }
 
-    private static bool HasIgnoreAttribute(IPropertySymbol property)
+    private static AttributeData? GetIgnoreAttribute(IPropertySymbol property)
     {
         return property.GetAttributes()
-            .Any(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborIgnoreAttribute");
+            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborIgnoreAttribute");
+    }
+
+    private static bool IsAlwaysIgnored(IPropertySymbol property)
+    {
+        var ignoreAttr = GetIgnoreAttribute(property);
+        if (ignoreAttr == null)
+            return false;
+
+        // A bare [NCborIgnore] (no Condition set) defaults to Always, same as the runtime attribute's default.
+        return GetIgnoreCondition(ignoreAttr) == NCborIgnoreCondition.Always;
+    }
+
+    private static NCborIgnoreCondition GetIgnoreCondition(AttributeData ignoreAttr)
+    {
+        foreach (var arg in ignoreAttr.NamedArguments)
+        {
+            if (arg.Key == "Condition" && arg.Value.Value is int val)
+                return (NCborIgnoreCondition)val;
+        }
+        return NCborIgnoreCondition.Always;
+    }
+
+    /// <summary>
+    /// Returns a C# boolean expression that must be true for the property's key/value pair to
+    /// be written, or null if the property should always be written unconditionally.
+    /// </summary>
+    private static string? GetWriteGuard(IPropertySymbol property)
+    {
+        var defaultValueAttr = property.GetAttributes()
+            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborDefaultValueAttribute");
+        if (defaultValueAttr != null && defaultValueAttr.ConstructorArguments.Length > 0)
+        {
+            var literal = FormatDefaultValueLiteral(defaultValueAttr.ConstructorArguments[0].Value);
+            var typeName = property.Type.ToDisplayString();
+            return $"!System.Collections.Generic.EqualityComparer<{typeName}>.Default.Equals(value.{property.Name}, {literal})";
+        }
+
+        var ignoreAttr = GetIgnoreAttribute(property);
+        if (ignoreAttr == null)
+            return null;
+
+        var condition = GetIgnoreCondition(ignoreAttr);
+        var typeDisplayName = property.Type.ToDisplayString();
+        switch (condition)
+        {
+            case NCborIgnoreCondition.WhenWritingNull:
+                // Matches System.Text.Json: has no effect on non-nullable value types.
+                if (!CanBeNull(property.Type))
+                    return null;
+                return $"value.{property.Name} != null";
+            case NCborIgnoreCondition.WhenWritingDefault:
+                return $"!System.Collections.Generic.EqualityComparer<{typeDisplayName}>.Default.Equals(value.{property.Name}, default({typeDisplayName}))";
+            default:
+                // Always is filtered out by GetSerializableProperties; Never means always write.
+                return null;
+        }
+    }
+
+    private static bool CanBeNull(ITypeSymbol type)
+    {
+        if (type.IsReferenceType)
+            return true;
+        return type is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "Nullable";
+    }
+
+    private static string FormatDefaultValueLiteral(object? value)
+    {
+        return value switch
+        {
+            null => "null",
+            bool b => b ? "true" : "false",
+            string s => "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"",
+            char c => $"'{c}'",
+            double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture) + "d",
+            float f => f.ToString(System.Globalization.CultureInfo.InvariantCulture) + "f",
+            decimal m => m.ToString(System.Globalization.CultureInfo.InvariantCulture) + "m",
+            long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture) + "L",
+            uint ui => ui.ToString(System.Globalization.CultureInfo.InvariantCulture) + "u",
+            ulong ul => ul.ToString(System.Globalization.CultureInfo.InvariantCulture) + "ul",
+            _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "default"
+        };
     }
 
     private static string GetPropertyName(IPropertySymbol property, NCborNamingPolicy namingPolicy)

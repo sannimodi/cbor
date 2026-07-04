@@ -196,6 +196,20 @@ public class SelfRefNode
     public SelfRefNode? Next { get; set; }
 }
 
+public class IgnoreConditionModel
+{
+    public string Name { get; set; } = string.Empty;
+
+    [NCborIgnore(Condition = NCborIgnoreCondition.Never)]
+    public int AlwaysIncluded { get; set; }
+
+    [NCborIgnore(Condition = NCborIgnoreCondition.WhenWritingNull)]
+    public string? OptionalNote { get; set; }
+
+    [NCborIgnore(Condition = NCborIgnoreCondition.WhenWritingDefault)]
+    public int Count { get; set; }
+}
+
 // Test context for source generator
 [NCborSerializable(typeof(SimpleModel))]
 [NCborSerializable(typeof(GuidModel))]
@@ -213,6 +227,7 @@ public class SelfRefNode
 [NCborSerializable(typeof(MixedArrayModel))]
 [NCborSerializable(typeof(ByteArrayModel))]
 [NCborSerializable(typeof(EnumModel))]
+[NCborSerializable(typeof(IgnoreConditionModel))]
 [NCborSerializable(typeof(List<SimpleModel>))]
 [NCborSerializable(typeof(List<string>))]
 [NCborSerializable(typeof(Dictionary<string, string>))]

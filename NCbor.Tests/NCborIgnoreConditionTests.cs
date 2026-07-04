@@ -94,4 +94,69 @@ public class NCborIgnoreConditionTests
 
         ReadPropertyNames(data).Should().Contain("IsEnabled");
     }
+
+    [Fact]
+    public void NCborDefaultValue_EnumTypedDefault_ValueMatchesDeclaredDefault_PropertyOmittedFromMap()
+    {
+        // Regression test: [NCborDefaultValue(UserRole.Admin)] previously generated
+        // EqualityComparer<UserRole>.Default.Equals(value.Role, 3) — a bare numeric literal
+        // with no cast, which fails to compile (CS0176) for any non-zero enum default. If this
+        // model didn't compile, the whole test assembly would fail to build.
+        var model = new EnumDefaultValueModel { Name = "a", Role = UserRole.Admin };
+
+        var data = NCborSerializer.Serialize(model, _context.EnumDefaultValueModel);
+
+        ReadPropertyNames(data).Should().NotContain("Role");
+    }
+
+    [Fact]
+    public void NCborDefaultValue_EnumTypedDefault_ValueDiffersFromDeclaredDefault_PropertyIncludedAndRoundTrips()
+    {
+        var model = new EnumDefaultValueModel { Name = "a", Role = UserRole.SuperAdmin };
+
+        var data = NCborSerializer.Serialize(model, _context.EnumDefaultValueModel);
+        var result = NCborSerializer.Deserialize(data, _context.EnumDefaultValueModel);
+
+        ReadPropertyNames(data).Should().Contain("Role");
+        result.Role.Should().Be(UserRole.SuperAdmin);
+    }
+
+    [Fact]
+    public void NCborDefaultValue_OnlyAttribute_ContextDefaultIgnoreConditionAlways_StillIncludedWhenNonDefault()
+    {
+        // Regression test: IsAlwaysIgnored previously had no awareness of [NCborDefaultValue].
+        // A context with DefaultIgnoreCondition = Always would silently drop a property that
+        // carries only [NCborDefaultValue] (no explicit [NCborIgnore]) unconditionally, even
+        // when its value differed from the declared default — bypassing the attribute's whole
+        // point. AlwaysIgnoreContext below sets exactly that context-wide default.
+        var model = new AlwaysIgnoreDefaultValueModel { Count = 7 };
+
+        var data = NCborSerializer.Serialize(model, AlwaysIgnoreContext.Default.AlwaysIgnoreDefaultValueModel);
+        var result = NCborSerializer.Deserialize(data, AlwaysIgnoreContext.Default.AlwaysIgnoreDefaultValueModel);
+
+        ReadPropertyNames(data).Should().Contain("Count");
+        result.Count.Should().Be(7);
+    }
+
+    [Fact]
+    public void NCborDefaultValue_OnlyAttribute_ContextDefaultIgnoreConditionAlways_OmittedWhenMatchesDefault()
+    {
+        var model = new AlwaysIgnoreDefaultValueModel { Count = 0 };
+
+        var data = NCborSerializer.Serialize(model, AlwaysIgnoreContext.Default.AlwaysIgnoreDefaultValueModel);
+
+        ReadPropertyNames(data).Should().NotContain("Count");
+    }
+
+    [Fact]
+    public void NCborIgnore_UnattributedProperty_ContextDefaultIgnoreConditionAlways_IsDropped()
+    {
+        // Confirms the fix is scoped correctly: a property with NEITHER [NCborIgnore] NOR
+        // [NCborDefaultValue] must still honor a context-wide DefaultIgnoreCondition = Always.
+        var model = new AlwaysIgnoreDefaultValueModel { Count = 7, PlainProperty = "should vanish" };
+
+        var data = NCborSerializer.Serialize(model, AlwaysIgnoreContext.Default.AlwaysIgnoreDefaultValueModel);
+
+        ReadPropertyNames(data).Should().NotContain("PlainProperty");
+    }
 }

@@ -40,6 +40,14 @@ public class ModelWithAttributes
     public bool IsEnabled { get; set; } = true;
 }
 
+public class EnumDefaultValueModel
+{
+    public string Name { get; set; } = string.Empty;
+
+    [NCborDefaultValue(UserRole.Admin)]
+    public UserRole Role { get; set; }
+}
+
 public class NestedModel
 {
     public string Title { get; set; } = string.Empty;
@@ -219,6 +227,28 @@ public class ConverterModel
     public DateTime Timestamp { get; set; }
 }
 
+public class CountingConverter : INCborConverter<string>
+{
+    public static int InstancesCreated;
+
+    public CountingConverter()
+    {
+        InstancesCreated++;
+    }
+
+    public void Write(CborWriter writer, string value) => writer.WriteTextString(value);
+    public string Read(CborReader reader) => reader.ReadTextString();
+}
+
+public class ConverterCachingModel
+{
+    [NCborConverter(typeof(CountingConverter))]
+    public string A { get; set; } = string.Empty;
+
+    [NCborConverter(typeof(CountingConverter))]
+    public string B { get; set; } = string.Empty;
+}
+
 public class DefaultIgnoreConditionModel
 {
     public string Name { get; set; } = string.Empty;
@@ -226,6 +256,14 @@ public class DefaultIgnoreConditionModel
 
     [NCborIgnore(Condition = NCborIgnoreCondition.Never)]
     public int AlwaysIncluded { get; set; }
+}
+
+public class AlwaysIgnoreDefaultValueModel
+{
+    [NCborDefaultValue(0)]
+    public int Count { get; set; }
+
+    public string PlainProperty { get; set; } = string.Empty;
 }
 
 public class EnumAsStringModel
@@ -285,6 +323,7 @@ public class IgnoreConditionModel
 [NCborSerializable(typeof(SimpleDecimalModel))]
 [NCborSerializable(typeof(DecimalModel))]
 [NCborSerializable(typeof(ModelWithAttributes))]
+[NCborSerializable(typeof(EnumDefaultValueModel))]
 [NCborSerializable(typeof(NestedModel))]
 [NCborSerializable(typeof(DictionaryModel))]
 [NCborSerializable(typeof(NullableDictionaryModel))]
@@ -297,6 +336,7 @@ public class IgnoreConditionModel
 [NCborSerializable(typeof(EnumModel))]
 [NCborSerializable(typeof(IgnoreConditionModel))]
 [NCborSerializable(typeof(ConverterModel))]
+[NCborSerializable(typeof(ConverterCachingModel))]
 [NCborSerializable(typeof(EnumAsStringModel))]
 [NCborSerializable(typeof(ImmutablePerson))]
 [NCborSerializable(typeof(HybridConstructorModel))]

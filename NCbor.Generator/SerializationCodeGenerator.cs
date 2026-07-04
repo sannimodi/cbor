@@ -315,12 +315,44 @@ internal static class SerializationCodeGenerator
     }
 
     /// <summary>
-    /// Returns the type's constructor marked with <c>[NCborConstructor]</c>, or null if it has none.
+    /// Returns every constructor marked <c>[NCborConstructor]</c> on the type — normally 0 or 1,
+    /// but nothing in the language prevents marking more than one.
+    /// </summary>
+    private static IEnumerable<IMethodSymbol> GetConstructorCandidates(INamedTypeSymbol typeSymbol)
+    {
+        return typeSymbol.Constructors.Where(c =>
+            c.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "NCbor.NCborConstructorAttribute"));
+    }
+
+    /// <summary>
+    /// Returns the type's constructor marked with <c>[NCborConstructor]</c>, or null if it has
+    /// none. If more than one is marked, picks the first arbitrarily — <c>CBOR007</c> (see
+    /// NCborSourceGenerator.cs) reports that as a usage error rather than resolving it silently.
     /// </summary>
     private static IMethodSymbol? GetDeserializationConstructor(INamedTypeSymbol typeSymbol)
     {
-        return typeSymbol.Constructors.FirstOrDefault(c =>
-            c.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "NCbor.NCborConstructorAttribute"));
+        return GetConstructorCandidates(typeSymbol).FirstOrDefault();
+    }
+
+    /// <summary>
+    /// True when a type has more than one constructor marked <c>[NCborConstructor]</c> — an
+    /// ambiguous configuration the generator can't resolve on the user's behalf.
+    /// </summary>
+    public static bool HasAmbiguousConstructors(INamedTypeSymbol typeSymbol)
+    {
+        return GetConstructorCandidates(typeSymbol).Skip(1).Any();
+    }
+
+    /// <summary>
+    /// Only "plain object" types go through property-based dispatch at all; collections, byte[],
+    /// and built-ins are serialized by iterating elements/values, so checks scoped to "properties
+    /// the codegen loop will actually see" must exclude these or they misfire on the type's own
+    /// BCL properties (e.g. List&lt;T&gt;.Count).
+    /// </summary>
+    private static bool IsPlainObjectType(ITypeSymbol typeSymbol)
+    {
+        return !IsByteArray(typeSymbol) && !IsList(typeSymbol, out _) && !IsArray(typeSymbol, out _) &&
+               !IsDictionary(typeSymbol, out _, out _) && !IsBuiltInType(typeSymbol);
     }
 
     /// <summary>
@@ -346,12 +378,7 @@ internal static class SerializationCodeGenerator
     /// </summary>
     public static IEnumerable<IPropertySymbol> GetUncoveredGetOnlyProperties(INamedTypeSymbol typeSymbol, NCborIgnoreCondition defaultIgnoreCondition)
     {
-        // Only "plain object" types go through property-based dispatch at all; collections,
-        // byte[], and built-ins are serialized by iterating elements/values, so their own
-        // (often get-only) BCL properties like List<T>.Count are never a serialization target
-        // and would otherwise be false positives here.
-        if (IsByteArray(typeSymbol) || IsList(typeSymbol, out _) || IsArray(typeSymbol, out _) ||
-            IsDictionary(typeSymbol, out _, out _) || IsBuiltInType(typeSymbol))
+        if (!IsPlainObjectType(typeSymbol))
         {
             return Enumerable.Empty<IPropertySymbol>();
         }
@@ -366,6 +393,46 @@ internal static class SerializationCodeGenerator
             .Where(p => constructor == null || FindMatchingParameter(constructor, p) == null);
     }
 
+    /// <summary>
+    /// Returns <c>[NCborConstructor]</c> parameters with no matching property, which the
+    /// generator will silently initialize to <c>default(T)</c> on every deserialize — used to
+    /// emit a usage diagnostic instead of leaving that discovery to a confused bug report.
+    /// </summary>
+    public static IEnumerable<IParameterSymbol> GetUnmatchedConstructorParameters(INamedTypeSymbol typeSymbol, NCborIgnoreCondition defaultIgnoreCondition)
+    {
+        if (!IsPlainObjectType(typeSymbol))
+        {
+            return Enumerable.Empty<IParameterSymbol>();
+        }
+
+        var constructor = GetDeserializationConstructor(typeSymbol);
+        if (constructor == null)
+        {
+            return Enumerable.Empty<IParameterSymbol>();
+        }
+
+        var properties = GetSerializableProperties(typeSymbol, defaultIgnoreCondition).ToList();
+        return constructor.Parameters.Where(p => FindMatchingProperty(properties, p) == null);
+    }
+
+    /// <summary>
+    /// Returns properties decorated with <c>[NCborEnumAsString]</c> whose type is neither an enum
+    /// nor a nullable enum — the attribute silently has no effect for these today; used to emit a
+    /// usage diagnostic instead of letting the misapplication pass unnoticed.
+    /// </summary>
+    public static IEnumerable<IPropertySymbol> GetMisusedEnumAsStringProperties(INamedTypeSymbol typeSymbol)
+    {
+        if (!IsPlainObjectType(typeSymbol))
+        {
+            return Enumerable.Empty<IPropertySymbol>();
+        }
+
+        return typeSymbol.GetMembers()
+            .OfType<IPropertySymbol>()
+            .Where(p => !p.IsStatic && HasEnumAsStringAttribute(p))
+            .Where(p => p.Type.TypeKind != TypeKind.Enum && !TryGetNullableEnumUnderlyingType(p.Type, out _));
+    }
+
     private static AttributeData? GetIgnoreAttribute(IPropertySymbol property)
     {
         return property.GetAttributes()
@@ -375,9 +442,27 @@ internal static class SerializationCodeGenerator
     private static bool IsAlwaysIgnored(IPropertySymbol property, NCborIgnoreCondition defaultIgnoreCondition)
     {
         var ignoreAttr = GetIgnoreAttribute(property);
-        // No explicit [NCborIgnore]: fall back to the context-wide default condition.
-        var effectiveCondition = ignoreAttr != null ? GetIgnoreCondition(ignoreAttr) : defaultIgnoreCondition;
-        return effectiveCondition == NCborIgnoreCondition.Always;
+        if (ignoreAttr != null)
+        {
+            return GetIgnoreCondition(ignoreAttr) == NCborIgnoreCondition.Always;
+        }
+
+        // A property with its own [NCborDefaultValue] (but no explicit [NCborIgnore]) opts into
+        // value-based inclusion via GetWriteGuard, which already gives that attribute top
+        // priority — it must not be swallowed by a context-wide DefaultIgnoreCondition.Always,
+        // or the property would be silently dropped unconditionally regardless of its value.
+        if (GetDefaultValueAttribute(property) != null)
+        {
+            return false;
+        }
+
+        return defaultIgnoreCondition == NCborIgnoreCondition.Always;
+    }
+
+    private static AttributeData? GetDefaultValueAttribute(IPropertySymbol property)
+    {
+        return property.GetAttributes()
+            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborDefaultValueAttribute");
     }
 
     /// <summary>
@@ -394,6 +479,39 @@ internal static class SerializationCodeGenerator
         return converterAttr.ConstructorArguments[0].Value is ITypeSymbol converterTypeSymbol
             ? converterTypeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             : null;
+    }
+
+    /// <summary>
+    /// Returns the distinct <c>[NCborConverter]</c> types used by a type's serializable
+    /// properties, so the generator can declare one cached instance field per converter type
+    /// instead of allocating a new instance on every single serialize/deserialize call.
+    /// </summary>
+    public static IEnumerable<string> GetDistinctConverterTypes(INamedTypeSymbol typeSymbol, NCborIgnoreCondition defaultIgnoreCondition)
+    {
+        if (!IsPlainObjectType(typeSymbol))
+        {
+            return Enumerable.Empty<string>();
+        }
+
+        return GetSerializableProperties(typeSymbol, defaultIgnoreCondition)
+            .Select(GetConverterType)
+            .Where(t => t != null)
+            .Distinct()!;
+    }
+
+    /// <summary>
+    /// Deterministic field name for a cached converter instance — must match exactly between
+    /// where the field is declared (NCborSourceGenerator.cs) and where it's referenced
+    /// (GeneratePropertySerialization/GeneratePropertyDeserialization below).
+    /// </summary>
+    public static string GetConverterFieldName(string converterType)
+    {
+        var sanitized = new StringBuilder(converterType.Length);
+        foreach (var c in converterType)
+        {
+            sanitized.Append(char.IsLetterOrDigit(c) ? c : '_');
+        }
+        return "__converter_" + sanitized;
     }
 
     private static bool HasEnumAsStringAttribute(IPropertySymbol property)
@@ -430,11 +548,10 @@ internal static class SerializationCodeGenerator
     /// </summary>
     private static string? GetWriteGuard(IPropertySymbol property, NCborIgnoreCondition defaultIgnoreCondition)
     {
-        var defaultValueAttr = property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborDefaultValueAttribute");
+        var defaultValueAttr = GetDefaultValueAttribute(property);
         if (defaultValueAttr != null && defaultValueAttr.ConstructorArguments.Length > 0)
         {
-            var literal = FormatDefaultValueLiteral(defaultValueAttr.ConstructorArguments[0].Value);
+            var literal = FormatDefaultValueLiteral(defaultValueAttr.ConstructorArguments[0]);
             var typeName = property.Type.ToDisplayString();
             return $"!System.Collections.Generic.EqualityComparer<{typeName}>.Default.Equals(value.{property.Name}, {literal})";
         }
@@ -465,9 +582,23 @@ internal static class SerializationCodeGenerator
         return type is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "Nullable";
     }
 
-    private static string FormatDefaultValueLiteral(object? value)
+    /// <summary>
+    /// Formats an <c>[NCborDefaultValue(...)]</c> constructor argument as a C# literal matching
+    /// the property's own type. Enum-typed arguments need an explicit cast: Roslyn's
+    /// <see cref="TypedConstant.Value"/> for an enum constant is its boxed underlying numeric
+    /// value (e.g. boxed <c>int</c>), and C# only allows an *implicit* conversion from the
+    /// literal <c>0</c> to an enum type — any other bare numeric literal fails to compile against
+    /// an enum-typed parameter (e.g. <c>EqualityComparer&lt;MyEnum&gt;.Default.Equals(x, 3)</c>).
+    /// </summary>
+    private static string FormatDefaultValueLiteral(TypedConstant constant)
     {
-        return value switch
+        if (constant.Type is { TypeKind: TypeKind.Enum } enumType)
+        {
+            var numericLiteral = Convert.ToString(constant.Value, System.Globalization.CultureInfo.InvariantCulture) ?? "0";
+            return $"({enumType.ToDisplayString()}){numericLiteral}";
+        }
+
+        return constant.Value switch
         {
             null => "null",
             bool b => b ? "true" : "false",
@@ -479,7 +610,7 @@ internal static class SerializationCodeGenerator
             long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture) + "L",
             uint ui => ui.ToString(System.Globalization.CultureInfo.InvariantCulture) + "u",
             ulong ul => ul.ToString(System.Globalization.CultureInfo.InvariantCulture) + "ul",
-            _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "default"
+            var value => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "default"
         };
     }
 
@@ -504,7 +635,7 @@ internal static class SerializationCodeGenerator
         var converterType = GetConverterType(property);
         if (converterType != null)
         {
-            return $"new {converterType}().Write(writer, value.{property.Name});";
+            return $"{GetConverterFieldName(converterType)}.Write(writer, value.{property.Name});";
         }
 
         // [NCborEnumAsString] takes priority over the default numeric enum encoding.
@@ -584,7 +715,7 @@ internal static class SerializationCodeGenerator
         var converterType = GetConverterType(property);
         if (converterType != null)
         {
-            return $"new {converterType}().Read(reader)";
+            return $"{GetConverterFieldName(converterType)}.Read(reader)";
         }
 
         // [NCborEnumAsString] takes priority over the default numeric enum encoding.

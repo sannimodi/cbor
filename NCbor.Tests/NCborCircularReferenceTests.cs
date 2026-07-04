@@ -65,4 +65,30 @@ public class NCborCircularReferenceTests
         act.Should().Throw<NCborDeserializationException>()
             .WithMessage("*depth*");
     }
+
+    [Fact]
+    public void Serialize_ChainExactlyAtMaxDepth_Succeeds()
+    {
+        // CircularRefContext has MaxDepth = 5; a chain of exactly 5 nodes must be the last
+        // length that still succeeds (depths 0..4 checked against `depth >= 5`).
+        var head = BuildAcyclicChain(5);
+
+        var bytes = NCborSerializer.Serialize(head, CircularRefContext.Default.SelfRefNode);
+        var result = NCborSerializer.Deserialize(bytes, CircularRefContext.Default.SelfRefNode);
+
+        result.Should().NotBeNull();
+        result.Name.Should().Be("node-0");
+    }
+
+    [Fact]
+    public void Serialize_ChainOneNodeOverMaxDepth_Throws()
+    {
+        // One node more than the exact-boundary case above must be the first length that throws.
+        var head = BuildAcyclicChain(6);
+
+        Action act = () => NCborSerializer.Serialize(head, CircularRefContext.Default.SelfRefNode);
+
+        act.Should().Throw<NCborSerializationException>()
+            .WithMessage("*depth*");
+    }
 }

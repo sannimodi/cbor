@@ -11,6 +11,43 @@ implemented), GAP-3 resolved by decision (claims softened, benchmark suite itsel
 built), and GAP-12 packaging prepped but not published (needs credentials/action, not code).
 Nothing is silently unaddressed — every row states its actual current status.
 
+## Code review pass (2026-07-05)
+
+An 8-angle review of the whole session's diff (`git diff @{upstream}...HEAD`) found and fixed 8
+issues introduced or exposed while closing the gaps above — none tracked as separate GAP rows
+since they were fixed same-day, but recorded here for traceability:
+
+1. **Enum-typed `[NCborDefaultValue]` failed to compile** (`CS0176`) — `FormatDefaultValueLiteral`
+   now casts enum constants to their type instead of emitting a bare numeric literal.
+2. **`DefaultIgnoreCondition = Always` + a property with only `[NCborDefaultValue]`** was
+   silently, unconditionally dropped regardless of its value — `IsAlwaysIgnored` now treats
+   `[NCborDefaultValue]` (with no explicit `[NCborIgnore]`) as opting out of the context-wide
+   `Always` fallback, matching `GetWriteGuard`'s own priority for that attribute.
+3. **Unmatched `[NCborConstructor]` parameter** (no property with a matching name) now reports
+   `CBOR006` instead of silently deserializing to `default(T)` forever.
+4. **Ambiguous `[NCborConstructor]`** (more than one marked constructor) now reports `CBOR007` as
+   a build **error** instead of silently picking one via `FirstOrDefault`.
+5. **`[NCborEnumAsString]` on a non-enum property** now reports `CBOR008` instead of silently
+   having no effect.
+6. **Off-by-one in `MaxDepth`**: the guard was `depth > maxDepth`, permitting `maxDepth + 1`
+   levels before throwing. Changed to `depth >= maxDepth` so `MaxDepth = N` means at most `N`
+   levels succeed, matching the documented/intuitive meaning.
+7. **`[NCborConverter]`-decorated properties allocated a new converter instance on every single
+   call** — the generator now declares one cached `private static readonly` field per distinct
+   converter type on the `{Type}TypeInfo` class instead of `new {converterType}()` at each
+   dispatch site.
+8. **`NCborConverterAttribute`/`NCborConstructorAttribute` skipped CLAUDE.md's "NCborSample
+   first" methodology** — backfilled with manual reference implementations in
+   `NCborSample/Domain/ConverterSample.cs` and `ImmutablePersonSample.cs`, exercised from
+   `NCborSample/Program.cs`. (`NCborEnumAsStringAttribute` turned out to already have prior
+   manual validation — `NCborSample/Domain/EnumTestModel.cs`'s `useStringEnums` parameter — from
+   before this session; the original review finding overstated this one.)
+
+10 new tests added (186 total) covering all of the above except #8 (verified by running
+`NCborSample` directly) and #3/#4/#5 (verified by manual build reproduction with deliberately
+violating types — same approach as GAP-14's `CBOR005`, since asserting generator diagnostics
+automatically would need a `CSharpGeneratorDriver` test harness this repo doesn't have yet).
+
 ## How to use this file
 
 - When you close a gap: flip its Status to `Done`, add the commit/PR reference, and update

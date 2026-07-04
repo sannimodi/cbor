@@ -69,6 +69,42 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
                             "Usage", DiagnosticSeverity.Warning, true),
                         location, uncovered.Name, registeredType.Name));
                 }
+
+                // Warn about [NCborConstructor] parameters with no matching property — they
+                // would otherwise silently deserialize to default(T) forever.
+                foreach (var unmatchedParam in SerializationCodeGenerator.GetUnmatchedConstructorParameters(registeredType, contextDefaultIgnoreCondition))
+                {
+                    var location = unmatchedParam.Locations.FirstOrDefault() ?? Location.None;
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor("CBOR006", "NCbor Generator",
+                            "Constructor parameter '{0}' on type '{1}' has no matching property (by name) — it will always deserialize to its default value instead of data from the CBOR payload. Add a property named '{0}' or remove the parameter.",
+                            "Usage", DiagnosticSeverity.Warning, true),
+                        location, unmatchedParam.Name, registeredType.Name));
+                }
+
+                // Error: more than one [NCborConstructor] on the same type is ambiguous — the
+                // generator has no principled way to pick the "right" one, so this must be an
+                // error rather than a silently-arbitrary choice.
+                if (SerializationCodeGenerator.HasAmbiguousConstructors(registeredType))
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor("CBOR007", "NCbor Generator",
+                            "Type '{0}' has more than one constructor marked [NCborConstructor]. Exactly one constructor may be marked for deserialization — remove the attribute from the others.",
+                            "Usage", DiagnosticSeverity.Error, true),
+                        Location.None, registeredType.Name));
+                }
+
+                // Warn about [NCborEnumAsString] applied to a non-enum property — it silently
+                // has no effect today.
+                foreach (var misused in SerializationCodeGenerator.GetMisusedEnumAsStringProperties(registeredType))
+                {
+                    var location = misused.Locations.FirstOrDefault() ?? Location.None;
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        new DiagnosticDescriptor("CBOR008", "NCbor Generator",
+                            "Property '{0}' on type '{1}' is marked [NCborEnumAsString] but its type is not an enum (or nullable enum) — the attribute has no effect and the property serializes normally.",
+                            "Usage", DiagnosticSeverity.Warning, true),
+                        location, misused.Name, registeredType.Name));
+                }
             }
 
             // Diagnostic: found context class
@@ -237,16 +273,25 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             builder.AppendLine($"    private sealed class {propertyName}TypeInfo : NCborTypeInfo<{typeName}>");
             builder.AppendLine("    {");
             builder.AppendLine($"        private readonly {contextType.Name} _context;");
+            if (typeSymbol is INamedTypeSymbol namedTypeSymbolForConverters)
+            {
+                // Cache one instance per distinct [NCborConverter] type instead of allocating a
+                // new converter on every single Serialize/Deserialize call.
+                foreach (var converterType in SerializationCodeGenerator.GetDistinctConverterTypes(namedTypeSymbolForConverters, defaultIgnoreCondition))
+                {
+                    builder.AppendLine($"        private static readonly {converterType} {SerializationCodeGenerator.GetConverterFieldName(converterType)} = new {converterType}();");
+                }
+            }
             builder.AppendLine($"        public {propertyName}TypeInfo({contextType.Name} context) => _context = context;");
             builder.AppendLine($"        public override void Serialize(CborWriter writer, {typeName} value, int depth = 0)");
             builder.AppendLine("        {");
-            builder.AppendLine($"            if (depth > {maxDepth}) throw new NCborSerializationException(typeof({typeName}), \"Maximum serialization depth ({maxDepth}) exceeded at depth \" + depth + \". This usually indicates a circular reference; increase NCborSourceGenerationOptionsAttribute.MaxDepth if the object graph is intentionally this deep.\");");
+            builder.AppendLine($"            if (depth >= {maxDepth}) throw new NCborSerializationException(typeof({typeName}), \"Maximum serialization depth ({maxDepth}) exceeded at depth \" + depth + \". This usually indicates a circular reference; increase NCborSourceGenerationOptionsAttribute.MaxDepth if the object graph is intentionally this deep.\");");
             builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol, namingPolicy, "_context", defaultIgnoreCondition));
             builder.AppendLine("        }");
             builder.AppendLine();
             builder.AppendLine($"        public override {typeName} Deserialize(CborReader reader, int depth = 0)");
             builder.AppendLine("        {");
-            builder.AppendLine($"            if (depth > {maxDepth}) throw new NCborDeserializationException(typeof({typeName}), \"Maximum deserialization depth ({maxDepth}) exceeded at depth \" + depth + \". The CBOR data may be malformed or unexpectedly deep; increase NCborSourceGenerationOptionsAttribute.MaxDepth if intentional.\");");
+            builder.AppendLine($"            if (depth >= {maxDepth}) throw new NCborDeserializationException(typeof({typeName}), \"Maximum deserialization depth ({maxDepth}) exceeded at depth \" + depth + \". The CBOR data may be malformed or unexpectedly deep; increase NCborSourceGenerationOptionsAttribute.MaxDepth if intentional.\");");
             builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol, namingPolicy, "_context", defaultIgnoreCondition));
             builder.AppendLine("        }");
             builder.AppendLine("    }");

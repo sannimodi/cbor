@@ -73,6 +73,31 @@ Console.WriteLine($"  OptionalPermissions is null: {deserializedNullableEnum.Opt
 
 Console.WriteLine("=== Enum Testing Complete ===\n");
 
+// === CUSTOM CONVERTER TESTING (validates the pattern behind [NCborConverter]) ===
+Console.WriteLine("=== Custom Converter Testing ===");
+var converterModel = new ConverterSampleModel { Name = "ConverterTest", Timestamp = new DateTime(2026, 6, 15, 12, 30, 0, DateTimeKind.Utc) };
+var converterWriter = new CborWriter();
+ConverterSampleModel.Serialize(converterWriter, converterModel);
+var converterBytes = converterWriter.Encode();
+var converterReader = new CborReader(converterBytes);
+var deserializedConverterModel = ConverterSampleModel.Deserialize(converterReader);
+Console.WriteLine($"Custom converter round-trip successful: {deserializedConverterModel.Timestamp == converterModel.Timestamp}");
+Console.WriteLine($"  Timestamp: {deserializedConverterModel.Timestamp:O} (expected: {converterModel.Timestamp:O})");
+Console.WriteLine("=== Custom Converter Testing Complete ===\n");
+
+// === CONSTRUCTOR-BASED DESERIALIZATION TESTING (validates the pattern behind [NCborConstructor]) ===
+Console.WriteLine("=== Constructor-Based Deserialization Testing ===");
+var immutablePerson = new ImmutablePersonSample("Ada Lovelace", 36);
+var immutableWriter = new CborWriter();
+ImmutablePersonSample.Serialize(immutableWriter, immutablePerson);
+var immutableBytes = immutableWriter.Encode();
+var immutableReader = new CborReader(immutableBytes);
+var deserializedImmutablePerson = ImmutablePersonSample.Deserialize(immutableReader);
+Console.WriteLine($"Constructor-based round-trip successful: {deserializedImmutablePerson.Name == immutablePerson.Name && deserializedImmutablePerson.Age == immutablePerson.Age}");
+Console.WriteLine($"  Name: {deserializedImmutablePerson.Name} (expected: {immutablePerson.Name})");
+Console.WriteLine($"  Age: {deserializedImmutablePerson.Age} (expected: {immutablePerson.Age})");
+Console.WriteLine("=== Constructor-Based Deserialization Testing Complete ===\n");
+
 // Create a comprehensive Person object with all data types
 var person = new Person
 {

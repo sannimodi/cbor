@@ -57,4 +57,23 @@ public class NCborArrayTests
         deserialized.Length.Should().Be(3);
         deserialized.Should().BeEquivalentTo(stringArray);
     }
+
+    [Fact]
+    public void DeserializeIndefiniteLengthArray_FromAnotherEncoder_ShouldSucceed()
+    {
+        // NCbor's own writer always emits definite-length arrays (WriteStartArray(value.Length)),
+        // so this exercises the indefinite-length fallback path that only matters when reading
+        // CBOR produced by some other encoder.
+        var writer = new CborWriter();
+        writer.WriteStartArray(null);
+        writer.WriteInt32(10);
+        writer.WriteInt32(20);
+        writer.WriteInt32(30);
+        writer.WriteEndArray();
+        var bytes = writer.Encode();
+
+        var deserialized = NCborSerializer.Deserialize(bytes, _context.ArrayOfInt32);
+
+        deserialized.Should().BeEquivalentTo(new[] { 10, 20, 30 });
+    }
 }

@@ -72,7 +72,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **172 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
+- ✅ **Comprehensive Test Suite**: **173 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
   - ✅ **NCborSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **NCborExceptionTests** (23+ tests): Custom exception types and integration
@@ -194,20 +194,16 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
     practice.
 - **Priority**: DONE — no longer blocking production hardening
 
-#### 2.5.2 Array Memory Optimization - **LOW PRIORITY** ⚡
-- **Status**: **NEW** - Identified through performance analysis
-- **Analysis Finding**: Array deserialization uses List<T> intermediary causing allocation overhead
+#### 2.5.2 Array Memory Optimization - ✅ **COMPLETE** (2026-07-04)
+- **Status**: ✅ **DONE**
 - **Description**: Optimize array handling for memory efficiency
-- **Current Behavior**: Uses `List<T>` then `.ToArray()` for array deserialization
-- **Optimization Target**: Direct array allocation when length is known
-- **Deliverables**:
-  - Direct array allocation for definite-length CBOR arrays
-  - Maintain List<T> fallback for indefinite-length arrays
-  - Memory allocation benchmarks showing improvement
-  - Performance regression tests
-- **Effort**: 4-6 hours
-- **Dependencies**: Phase 2.5.1 (circular reference protection)
-- **Priority**: **LOW** - Performance optimization
+- **Delivered**:
+  - ✅ Direct array allocation for definite-length CBOR arrays (no `List<T>`/`.ToArray()` copy)
+  - ✅ `List<T>` fallback retained for indefinite-length arrays (exercised by a dedicated test
+    simulating another encoder, since NCbor's own writer always produces definite-length arrays)
+- **Not delivered (separately tracked, not blocking)**: memory allocation benchmarks — depends on
+  [GAPS.md](GAPS.md) GAP-3's benchmark suite existing first
+- **Priority**: DONE
 
 #### 2.5.3 Streaming API Foundation - **LOW PRIORITY** 🌊
 - **Status**: **NEW** - Identified for future scalability
@@ -469,7 +465,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Type Support**: ✅ **100%** (All critical types complete - DateTime, GUID, primitives, collections, Dictionary, Arrays, Enums)
 - **Attribute System**: ✅ **100%** (all 7 attribute mechanisms implemented, including the context-wide `DefaultIgnoreCondition` default and the `CBOR005` diagnostic for uncovered get-only properties)
 - **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
-- **Testing**: ✅ **100%** (172 tests covering all implemented features)
+- **Testing**: ✅ **100%** (173 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
@@ -594,7 +590,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **AOT Compatibility**: Zero runtime reflection, fully compatible with Native AOT compilation
 - ✅ **API Design**: Clean, familiar API following System.Text.Json patterns exactly
 - ✅ **Build System**: Resolved complex circular dependency issues with proper project references
-- ✅ **Quality Assurance**: 172 comprehensive tests with 100% pass rate
+- ✅ **Quality Assurance**: 173 comprehensive tests with 100% pass rate
 
 ### Production Readiness Indicators ✅
 - ✅ **Functional Demo**: Working serialization of complex object graphs and collections
@@ -642,7 +638,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### **🎯 Success Metrics & KPIs**
 
 **Technical Excellence**:
-- ✅ 172 tests passing (achieved)
+- ✅ 173 tests passing (achieved)
 - ✅ Zero reflection architecture (achieved)
 - 🎯 <5% performance overhead vs hand-written code (target)
 
@@ -690,7 +686,7 @@ Based on comprehensive multi-model analysis, the NCbor Serialization Library has
 
 **🎯 Perfect Market Niche**: Occupying the "System.Text.Json for CBOR" position with clear competitive advantages
 
-**⚡ Technical Excellence**: 99% feature complete with 172 passing tests, zero reflection architecture
+**⚡ Technical Excellence**: 99% feature complete with 173 passing tests, zero reflection architecture
 
 **🚀 Future-Aligned**: Source generation approach follows Microsoft's AOT evolution direction
 

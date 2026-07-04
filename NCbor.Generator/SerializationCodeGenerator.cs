@@ -154,28 +154,38 @@ internal static class SerializationCodeGenerator
         {
             if (arrayElementType == null)
                 throw new InvalidOperationException("Element type cannot be null for a valid array type.");
-                
-            builder.AppendLine($"var list = new System.Collections.Generic.List<{arrayElementType.ToDisplayString()}>();");
+
+            var elementTypeName = arrayElementType.ToDisplayString();
+            var itemExpression = IsBuiltInType(arrayElementType)
+                ? GenerateDirectDeserialization(arrayElementType)
+                : $"{contextRef}.{GetPropertyNameFromType(arrayElementType)}.Deserialize(reader, depth + 1)";
+
+            // Definite-length arrays (which is everything this library's own writer produces,
+            // via WriteStartArray(value.Length)) allocate the array directly instead of paying
+            // for a List<T> + ToArray() copy. Indefinite-length arrays (possible when reading
+            // CBOR from another encoder) still need the List<T> accumulator since the final
+            // size isn't known up front.
+            builder.AppendLine($"{elementTypeName}[] result;");
             builder.AppendLine("int? length = reader.ReadStartArray();");
-            builder.AppendLine("for (int i = 0; length == null || i < length; i++)");
+            builder.AppendLine("if (length is int definiteLength)");
             builder.AppendLine("{");
-            builder.AppendLine("    if (length == null && reader.PeekState() == CborReaderState.EndArray)");
-            builder.AppendLine("        break;");
-            
-            // Handle built-in types directly, complex types via context
-            if (IsBuiltInType(arrayElementType))
-            {
-                builder.AppendLine($"    var item = {GenerateDirectDeserialization(arrayElementType)};");
-            }
-            else
-            {
-                builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Deserialize(reader, depth + 1);");
-            }
-            builder.AppendLine("    list.Add(item);");
+            builder.AppendLine($"    result = new {elementTypeName}[definiteLength];");
+            builder.AppendLine("    for (int i = 0; i < definiteLength; i++)");
+            builder.AppendLine("    {");
+            builder.AppendLine($"        result[i] = {itemExpression};");
+            builder.AppendLine("    }");
+            builder.AppendLine("}");
+            builder.AppendLine("else");
+            builder.AppendLine("{");
+            builder.AppendLine($"    var list = new System.Collections.Generic.List<{elementTypeName}>();");
+            builder.AppendLine("    while (reader.PeekState() != CborReaderState.EndArray)");
+            builder.AppendLine("    {");
+            builder.AppendLine($"        list.Add({itemExpression});");
+            builder.AppendLine("    }");
+            builder.AppendLine("    result = list.ToArray();");
             builder.AppendLine("}");
             builder.AppendLine("reader.ReadEndArray();");
-            builder.AppendLine("return list.ToArray();");
+            builder.AppendLine("return result;");
             return builder.ToString();
         }
         if (IsDictionary(typeSymbol, out var keyType, out var valueType))

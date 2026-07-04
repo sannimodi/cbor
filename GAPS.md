@@ -5,7 +5,7 @@ cbor-serialization-specs.md, and release.md against the actual source (`NCbor/`,
 `NCbor.Generator/`). Fix items one by one, check them off, and keep this file current —
 it is the single source of truth for "is X actually done," not the prose docs.
 
-Last audited: 2026-07-04. Last gap closed: 2026-07-04 (GAP-8 — string-enum serialization). Remaining: GAP-3 (benchmarks), GAP-9 (DateTimeKind — needs a product decision), and the P3 items (GAP-10 chunked byte[], GAP-11 array allocation, GAP-12 NuGet publish).
+Last audited: 2026-07-04. Last gap closed: 2026-07-04 (GAP-11 — array deserialization allocation). Remaining: GAP-3 (benchmarks), GAP-9 (DateTimeKind — needs a product decision), GAP-10 (chunked byte[] streaming), GAP-12 (NuGet publish — needs actual credentials/action, not just code).
 
 ## How to use this file
 
@@ -60,7 +60,7 @@ audit; listed here so the mismatch and its fix are traceable.
 | ID | Area | Current state | It should be | Fix required | Status |
 |----|------|---------------|---------------|---------------|--------|
 | GAP-10 | Chunked/streaming byte[] | cbor-serialization-specs.md §7.2 claims "support for chunked serialization" / "memory-efficient streaming" for binary data. Implementation is a single unconditional `writer.WriteByteString(value)` call (`SerializationCodeGenerator.cs:10,272,274`) — fully buffered, no chunking. | Fine for typical payloads; only matters once byte[] properties routinely carry very large buffers. | Add indefinite-length byte-string chunking in the generator, or (cheaper) leave as-is and keep the spec honest about current single-buffer behavior. | Open |
-| GAP-11 | Array deserialization allocation | Arrays deserialize via a `List<T>` intermediary then `.ToArray()` (roadmap.md Phase 2.5.2), causing avoidable allocation for large arrays. | Direct array allocation when the CBOR array has a definite length. | Read definite length up front, allocate `T[length]` directly, fall back to `List<T>` only for indefinite-length arrays. | Open |
+| GAP-11 | Array deserialization allocation | ~~Arrays deserialize via a List<T> intermediary...~~ **Fixed 2026-07-04**: when the CBOR array has a definite length (which is everything NCbor's own writer produces, via `WriteStartArray(value.Length)`), the generator now allocates the array directly and assigns by index — no `List<T>` intermediary or `.ToArray()` copy. Indefinite-length arrays (only relevant when reading CBOR from another encoder) still use the `List<T>` accumulator, since the final size isn't known up front. | Direct array allocation when the CBOR array has a definite length. | Done — see the `IsArray` branch of `SerializationCodeGenerator.GenerateDeserializationCode`, and `NCbor.Tests/NCborArrayTests.cs`'s `DeserializeIndefiniteLengthArray_FromAnotherEncoder_ShouldSucceed` (proves the fallback path still works, since NCbor's own serializer never naturally exercises it). | **Done** |
 | GAP-12 | NuGet publishing | release.md documents a publish flow (`dotnet nuget push ... NCbor.Generator.1.0.0.nupkg`) as routine process, but `git tag` is empty and no package has ever been published. | Either publish once the library is ready, or keep release.md framed as "process for when we do this" rather than implying it already happened. | No code change — track as a release milestone, not a doc bug (already reworded per DOC-4/DOC-5). | Open |
 
 ---

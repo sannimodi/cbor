@@ -228,6 +228,17 @@ public class DefaultIgnoreConditionModel
     public int AlwaysIncluded { get; set; }
 }
 
+public class EnumAsStringModel
+{
+    public string Name { get; set; } = string.Empty;
+
+    [NCborEnumAsString]
+    public UserRole Role { get; set; }
+
+    [NCborEnumAsString]
+    public UserRole? OptionalRole { get; set; }
+}
+
 public class ImmutablePerson
 {
     [NCborConstructor]
@@ -286,6 +297,7 @@ public class IgnoreConditionModel
 [NCborSerializable(typeof(EnumModel))]
 [NCborSerializable(typeof(IgnoreConditionModel))]
 [NCborSerializable(typeof(ConverterModel))]
+[NCborSerializable(typeof(EnumAsStringModel))]
 [NCborSerializable(typeof(ImmutablePerson))]
 [NCborSerializable(typeof(HybridConstructorModel))]
 [NCborSerializable(typeof(List<SimpleModel>))]

@@ -72,7 +72,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **168 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
+- ✅ **Comprehensive Test Suite**: **172 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
   - ✅ **NCborSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **NCborExceptionTests** (23+ tests): Custom exception types and integration
@@ -241,9 +241,9 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
   - ✅ **Enums** (numeric serialization) - **CRITICAL** ✅ ⭐ **NEWLY COMPLETED**
 - **Remaining Optional Types** (not required for v1.0):
   - ✅ `byte[]` arrays with native CBOR byte string encoding - **COMPLETED**
+  - ✅ String enum serialization mode via `[NCborEnumAsString]` - **COMPLETED** (2026-07-04)
   - ❌ `TimeSpan` - **LOW**
   - ❌ `Uri` - **LOW**
-  - ❌ String enum serialization mode - **LOW**
 - **Effort**: ALL CRITICAL TYPES COMPLETE! Library ready for v1.0
 - **Dependencies**: ✅ Phase 2.1 complete (exception handling)
 - **Priority**: ✅ **COMPLETE** - All core type support implemented!
@@ -469,7 +469,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Type Support**: ✅ **100%** (All critical types complete - DateTime, GUID, primitives, collections, Dictionary, Arrays, Enums)
 - **Attribute System**: ✅ **100%** (all 7 attribute mechanisms implemented, including the context-wide `DefaultIgnoreCondition` default and the `CBOR005` diagnostic for uncovered get-only properties)
 - **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
-- **Testing**: ✅ **100%** (168 tests covering all implemented features)
+- **Testing**: ✅ **100%** (172 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
@@ -594,7 +594,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **AOT Compatibility**: Zero runtime reflection, fully compatible with Native AOT compilation
 - ✅ **API Design**: Clean, familiar API following System.Text.Json patterns exactly
 - ✅ **Build System**: Resolved complex circular dependency issues with proper project references
-- ✅ **Quality Assurance**: 168 comprehensive tests with 100% pass rate
+- ✅ **Quality Assurance**: 172 comprehensive tests with 100% pass rate
 
 ### Production Readiness Indicators ✅
 - ✅ **Functional Demo**: Working serialization of complex object graphs and collections
@@ -642,7 +642,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### **🎯 Success Metrics & KPIs**
 
 **Technical Excellence**:
-- ✅ 168 tests passing (achieved)
+- ✅ 172 tests passing (achieved)
 - ✅ Zero reflection architecture (achieved)
 - 🎯 <5% performance overhead vs hand-written code (target)
 
@@ -690,7 +690,7 @@ Based on comprehensive multi-model analysis, the NCbor Serialization Library has
 
 **🎯 Perfect Market Niche**: Occupying the "System.Text.Json for CBOR" position with clear competitive advantages
 
-**⚡ Technical Excellence**: 99% feature complete with 168 passing tests, zero reflection architecture
+**⚡ Technical Excellence**: 99% feature complete with 172 passing tests, zero reflection architecture
 
 **🚀 Future-Aligned**: Source generation approach follows Microsoft's AOT evolution direction
 

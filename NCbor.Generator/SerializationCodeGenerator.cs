@@ -386,6 +386,24 @@ internal static class SerializationCodeGenerator
             : null;
     }
 
+    private static bool HasEnumAsStringAttribute(IPropertySymbol property)
+    {
+        return property.GetAttributes()
+            .Any(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborEnumAsStringAttribute");
+    }
+
+    private static bool TryGetNullableEnumUnderlyingType(ITypeSymbol type, out ITypeSymbol? enumType)
+    {
+        if (type is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "Nullable" &&
+            namedType.TypeArguments.Length == 1 && namedType.TypeArguments[0].TypeKind == TypeKind.Enum)
+        {
+            enumType = namedType.TypeArguments[0];
+            return true;
+        }
+        enumType = null;
+        return false;
+    }
+
     private static NCborIgnoreCondition GetIgnoreCondition(AttributeData ignoreAttr)
     {
         foreach (var arg in ignoreAttr.NamedArguments)
@@ -479,6 +497,19 @@ internal static class SerializationCodeGenerator
             return $"new {converterType}().Write(writer, value.{property.Name});";
         }
 
+        // [NCborEnumAsString] takes priority over the default numeric enum encoding.
+        if (HasEnumAsStringAttribute(property))
+        {
+            if (type.TypeKind == TypeKind.Enum)
+            {
+                return $"writer.WriteTextString(value.{property.Name}.ToString());";
+            }
+            if (TryGetNullableEnumUnderlyingType(type, out _))
+            {
+                return $"if (value.{property.Name}.HasValue) {{ writer.WriteTextString(value.{property.Name}.Value.ToString()); }} else {{ writer.WriteNull(); }}";
+            }
+        }
+
         // Handle byte[] / byte[]? as CBOR byte string (major type 2)
         if (IsByteArray(type))
         {
@@ -544,6 +575,21 @@ internal static class SerializationCodeGenerator
         if (converterType != null)
         {
             return $"new {converterType}().Read(reader)";
+        }
+
+        // [NCborEnumAsString] takes priority over the default numeric enum encoding.
+        if (HasEnumAsStringAttribute(property))
+        {
+            if (type.TypeKind == TypeKind.Enum)
+            {
+                var enumTypeName = type.ToDisplayString();
+                return $"({enumTypeName})System.Enum.Parse(typeof({enumTypeName}), reader.ReadTextString())";
+            }
+            if (TryGetNullableEnumUnderlyingType(type, out var nullableEnumType))
+            {
+                var enumTypeName = nullableEnumType!.ToDisplayString();
+                return $"reader.PeekState() == CborReaderState.Null ? ReadNullEnum<{enumTypeName}>(reader) : ({enumTypeName})System.Enum.Parse(typeof({enumTypeName}), reader.ReadTextString())";
+            }
         }
 
         // Handle byte[] / byte[]? as CBOR byte string (major type 2)

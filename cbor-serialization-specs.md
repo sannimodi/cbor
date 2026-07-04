@@ -285,8 +285,8 @@ true" without checking the status.*
 
 #### Enum Handling
 - ✅ Default serialization as underlying numeric values
-- 🔲 Optional string serialization via attribute — no such attribute or code path exists yet;
-  enums always serialize as their numeric value ([GAPS.md](GAPS.md) GAP-8)
+- ✅ Optional string serialization via `[NCborEnumAsString]` attribute (fixed 2026-07-04, see
+  [GAPS.md](GAPS.md) GAP-8)
 - ✅ Support for [Flags] enums
 - ✅ Handle invalid enum values gracefully
 

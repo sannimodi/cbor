@@ -271,17 +271,20 @@ Utilize System.Formats.Cbor classes:
 
 ### 7.2 Type Serialization Details
 
-*Status legend: ✅ Implemented today · 🔲 Planned, not yet implemented — see [GAPS.md](GAPS.md)
-for the tracked fix. This section describes the target design; do not read a bullet as "already
-true" without checking the status.*
+*Status legend: ✅ Implemented today · 🔲 Planned, not yet implemented · ⚪ By design, not
+planned — see [GAPS.md](GAPS.md) for the tracked history. This section describes the target
+design; do not read a bullet as "already true" without checking the status.*
 
 #### DateTime Handling
 - ✅ DateTime values are serialized as ISO 8601 strings (CBOR Tag 0)
-- ✅ DateTimeOffset includes timezone information
+- ✅ DateTimeOffset preserves its offset (timezone information)
 - ✅ Support for UTC and local time conversions
-- 🔲 Preserve `DateTimeKind` information — **not currently true**: the generator forces
-  `Unspecified → Utc` then calls `.ToUniversalTime()` before writing, so a `Local` value's
-  original Kind is not recoverable after deserialization ([GAPS.md](GAPS.md) GAP-9)
+- ⚪ `DateTimeKind` is **not** preserved, by design (decided 2026-07-04): the generator forces
+  `Unspecified → Utc` then calls `.ToUniversalTime()` before writing a `DateTime`, so a `Local`
+  value round-trips back UTC-normalized — the original `Kind` is not recoverable. This is
+  intentional, matches how many serializers treat `DateTime` vs. `DateTimeOffset`, and is not
+  planned to change ([GAPS.md](GAPS.md) GAP-9). Use `DateTimeOffset` if you need the offset
+  preserved.
 
 #### Enum Handling
 - ✅ Default serialization as underlying numeric values
@@ -297,11 +300,15 @@ true" without checking the status.*
 
 #### Binary Data
 - ✅ Efficient handling of byte arrays via native CBOR byte string (major type 2)
-- 🔲 Support for chunked serialization — not implemented; a single unconditional
-  `writer.WriteByteString(value)` call handles all byte[] values regardless of size
+- ✅ Support for chunked serialization (fixed 2026-07-04) — byte[] values over 4096 bytes write
+  as an indefinite-length CBOR byte string composed of 4096-byte chunks; `CborReader.ReadByteString()`
+  transparently reassembles this back into one array with no reader-side changes needed
   ([GAPS.md](GAPS.md) GAP-10)
-- 🔲 Memory-efficient streaming for large binary data — same gap as above, no streaming API
-  exists ([GAPS.md](GAPS.md) GAP-10)
+- ⚪ Memory-efficient streaming for large binary data — **not the same as chunked serialization
+  above, and still not true**: the input is a fully-materialized `byte[]`, so chunking the wire
+  encoding doesn't reduce runtime memory. Genuine streaming would mean accepting `Stream`/
+  `IAsyncEnumerable` instead of `byte[]`, a materially larger feature tracked separately in
+  roadmap.md Phase 2.5.3, not by GAP-10
 
 ---
 

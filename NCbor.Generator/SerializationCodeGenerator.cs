@@ -7,7 +7,7 @@ internal static class SerializationCodeGenerator
         var builder = new StringBuilder();
         if (IsByteArray(typeSymbol))
         {
-            builder.AppendLine("writer.WriteByteString(value);");
+            builder.AppendLine(GenerateByteStringWrite("value"));
             return builder.ToString();
         }
         if (IsList(typeSymbol, out var elementType))
@@ -525,9 +525,9 @@ internal static class SerializationCodeGenerator
         {
             if (type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
             {
-                return $"if (value.{property.Name} != null) {{ writer.WriteByteString(value.{property.Name}); }} else {{ writer.WriteNull(); }}";
+                return $"if (value.{property.Name} != null) {{ {GenerateByteStringWrite($"value.{property.Name}")} }} else {{ writer.WriteNull(); }}";
             }
-            return $"writer.WriteByteString(value.{property.Name});";
+            return GenerateByteStringWrite($"value.{property.Name}");
         }
 
         // Handle built-in types directly
@@ -804,6 +804,34 @@ internal static class SerializationCodeGenerator
                displayString == "System.DateTimeOffset" ||
                displayString == "System.Decimal" ||
                displayString == "decimal";
+    }
+
+    /// <summary>
+    /// Byte strings at or under this size are written in one <c>WriteByteString</c> call, same
+    /// as before. Larger ones are split into an indefinite-length byte string of chunks this
+    /// size — <c>CborReader.ReadByteString()</c> transparently reassembles either encoding into
+    /// a single byte[] on the read side, so no deserialization changes are needed.
+    /// </summary>
+    private const int ByteStringChunkThreshold = 4096;
+
+    /// <summary>
+    /// Emits a statement (not an expression — do not append a trailing semicolon) that writes
+    /// <paramref name="variableName"/> (a non-null byte[] expression) as a CBOR byte string,
+    /// chunking it via an indefinite-length byte string if it exceeds
+    /// <see cref="ByteStringChunkThreshold"/>.
+    /// </summary>
+    private static string GenerateByteStringWrite(string variableName)
+    {
+        return $"if ({variableName}.Length > {ByteStringChunkThreshold}) " +
+               "{ " +
+               "writer.WriteStartIndefiniteLengthByteString(); " +
+               $"for (int __chunkOffset = 0; __chunkOffset < {variableName}.Length; __chunkOffset += {ByteStringChunkThreshold}) " +
+               "{ " +
+               $"writer.WriteByteString(new System.ReadOnlySpan<byte>({variableName}, __chunkOffset, System.Math.Min({ByteStringChunkThreshold}, {variableName}.Length - __chunkOffset))); " +
+               "} " +
+               "writer.WriteEndIndefiniteLengthByteString(); " +
+               "} " +
+               $"else {{ writer.WriteByteString({variableName}); }}";
     }
 
     private static string GenerateDirectSerialization(string variableName, ITypeSymbol typeSymbol)

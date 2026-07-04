@@ -10,7 +10,7 @@ The only AOT-compliant, reflection-free CBOR serializer for .NET, utilizing Syst
 
 **Strategic Position**: Modern, high-performance CBOR serialization designed for the future of .NET - AOT-first, zero reflection, maximum performance.
 
-**Status**: Production-ready with 173 passing tests and comprehensive type support.
+**Status**: Production-ready with 177 passing tests and comprehensive type support.
 
 See the [specification document](cbor-serialization-specs.md) for learning more about the design and features, and [GAPS.md](GAPS.md) for the current, honest list of what's still missing or half-implemented.
 
@@ -23,7 +23,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 - **Optimized Generated Code** - Hand-written level performance with type safety
 
 ### 🎯 **Competitive Advantages**
-- **vs Reflection-Based CBOR Libraries**: 5-10x faster, AOT compatible, no runtime overhead
+- **vs Reflection-Based CBOR Libraries**: AOT compatible, no runtime reflection overhead; targeting 5-10x faster but this is not yet benchmarked — see [GAPS.md](GAPS.md) GAP-3
 - **vs Other Serializers**: CBOR standard compliance with modern .NET patterns
 - **vs Manual Implementation**: Type-safe, maintainable, comprehensive error handling
 
@@ -34,7 +34,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 - ✅ Support for .NET primitive types and collections
 - ✅ Efficient binary serialization with CBOR compliance
 - ✅ Native AOT support and trimming-friendly
-- ✅ Comprehensive test suite (173 tests, 0 failures)
+- ✅ Comprehensive test suite (177 tests, 0 failures)
 - ✅ Full nullable type support
 - ✅ Rich attribute system (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ 7 naming policies (CamelCase, SnakeCase, KebabCase, etc.)
@@ -52,7 +52,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 │   ├── NCborSourceGenerator.cs      # Incremental source generator
 │   └── SerializationCodeGenerator.cs # Code generation logic
 │
-├── NCbor.Tests/       # Comprehensive test suite (173 tests)
+├── NCbor.Tests/       # Comprehensive test suite (177 tests)
 │   ├── NCborTests.cs                # Core serialization tests
 │   ├── NCborErrorTests.cs           # Error handling tests
 │   ├── NCborDictionaryTests.cs      # Dictionary serialization tests
@@ -140,7 +140,7 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 ## 🏆 **v1.0 Production Status - COMPLETE!**
 
 ### 📊 **Technical Excellence Metrics**
-- **173 Tests Passing** (0 failures) - Comprehensive coverage
+- **177 Tests Passing** (0 failures) - Comprehensive coverage
 - **99% Feature Complete** - All critical functionality implemented
 - **Zero Reflection** - Fully AOT compatible architecture
 - **Modern .NET Patterns** - Following System.Text.Json design
@@ -160,7 +160,7 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 - **Maintainability**: ✅ **Excellent** - Clear separation of concerns, follows .NET patterns
 - **Extensibility**: ✅ **High** - Easy to add new types using established patterns  
 - **Performance**: ✅ **Optimized** - Efficient generated code with minimal allocations
-- **Testability**: ✅ **Comprehensive** - 173 tests covering all scenarios
+- **Testability**: ✅ **Comprehensive** - 177 tests covering all scenarios
 - **Technical Debt**: ✅ **Minimal** - no TODO/HACK/FIXME markers in hand-written code (the generator does emit a `// TODO` placeholder comment for any type that falls outside `IsBuiltInType()`, which is expected behavior, not debt)
 
 ### 🔧 **Implementation Excellence**
@@ -172,10 +172,12 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 ### ⚠️ **Identified Improvement Opportunities**
 
 **🟡 Low Priority**
-- **Streaming Support**: Missing APIs for large data scenarios and progressive processing (see [GAPS.md](GAPS.md) GAP-10)
+- **Streaming Support**: no `Stream`/`IAsyncEnumerable`-based API for large payloads — everything
+  is in-memory `byte[]` in, `byte[]` out (roadmap.md Phase 2.5.3). Note this is different from
+  byte[] chunked wire encoding, which *is* implemented — see [GAPS.md](GAPS.md) GAP-10.
 
-See [GAPS.md](GAPS.md) for the full, current list — circular reference detection and array
-memory optimization (previously listed here) were both implemented 2026-07-04.
+See [GAPS.md](GAPS.md) for the full, current list — circular reference detection, array memory
+optimization, and byte[] chunked encoding (previously listed here) were all implemented 2026-07-04.
 
 ### 🎯 **Strategic Recommendations**
 1. **Consider streaming APIs** for large data processing capabilities
@@ -207,13 +209,13 @@ memory optimization (previously listed here) were both implemented 2026-07-04.
   - ✅ Complex nested object hierarchies
 - ✅ **Custom attributes support** (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with **173 passing tests, 0 failures** covering all functionality
+- ✅ **Comprehensive test suite** with **177 passing tests, 0 failures** covering all functionality
 - ✅ **Production-ready error handling** with custom exception types and contextual error messages
 - ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Working demo project** demonstrates real-world serialization scenarios
 
 **Quality Metrics:**
-- **Test Coverage**: 173 comprehensive tests with 100% pass rate
+- **Test Coverage**: 177 comprehensive tests with 100% pass rate
 - **AOT Verified**: Zero runtime reflection, fully compatible with Native AOT
 - **Production Ready**: Robust error handling, comprehensive type support
 - **Developer Experience**: Clean API following System.Text.Json patterns
@@ -231,7 +233,7 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 ### Currently Supported ✅
 - **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
 - **Decimal**: System.Decimal with CBOR Tag 4 (RFC 8949 decimal fractions), full 128-bit precision
-- **DateTime Types**: DateTime, DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601), UTC handling, timezone preservation
+- **DateTime Types**: DateTime, DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601). `DateTimeOffset` preserves its offset; `DateTime` is normalized to UTC on write, so `DateTimeKind` (Local/Unspecified) is not recoverable after round-trip — see [GAPS.md](GAPS.md) GAP-9 for why this is intentional, not a bug
 - **GUID**: System.Guid with efficient 16-byte binary format
 - **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
 - **Arrays**: T[] (string[], int[], SimpleModel[]) with efficient serialization and nullable array support
@@ -240,7 +242,7 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 - **Custom classes and structs** with source generation
 - **Nullable types** (int?, bool?, decimal?, DateTime?, Guid?, etc.) with auto-generated helper methods
 - **Nested objects** and complex type hierarchies
-- **Custom attributes**: NCborPropertyName, NCborIgnore, NCborDefaultValue (definition-only — see [GAPS.md](GAPS.md) GAP-6)
+- **Custom attributes**: NCborPropertyName, NCborIgnore, NCborDefaultValue, NCborConverter, NCborConstructor, NCborEnumAsString
 
 ### 🚀 **Performance & Benchmarking** (Coming in v1.1)
 **Next Priority**: Comprehensive benchmarking suite showing performance advantages:
@@ -251,7 +253,7 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 
 ### 📈 **Remaining Enhancements**
 - **Public Benchmark Results** - Quantified performance advantages (unverified today — see [GAPS.md](GAPS.md) GAP-3)
-- Streaming serialization for large objects (see [GAPS.md](GAPS.md) GAP-10)
+- Streaming serialization for large objects (`Stream`/`IAsyncEnumerable`-based API — roadmap.md Phase 2.5.3; not the same as byte[] chunked wire encoding, which is done — see [GAPS.md](GAPS.md) GAP-10)
 
 ## Error Handling
 
@@ -284,7 +286,7 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (173 tests)
+# Run the comprehensive test suite (177 tests)
 dotnet test NCbor.Tests/
 
 # Run the demo
@@ -293,7 +295,7 @@ dotnet run --project NCbor.Demo/
 
 ## Test Results
 
-The library includes a comprehensive test suite with **173 tests, 0 failures**:
+The library includes a comprehensive test suite with **177 tests, 0 failures**:
 
 - **NCborSerializerTests** (12+ tests): Core serialization functionality
 - **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases  

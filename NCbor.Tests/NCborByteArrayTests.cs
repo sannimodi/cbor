@@ -122,4 +122,55 @@ public class NCborByteArrayTests
 
         deserialized.Should().BeEquivalentTo(data);
     }
+
+    [Fact]
+    public void SerializeByteArray_BelowChunkThreshold_UsesDefiniteLengthEncoding()
+    {
+        var data = new byte[100];
+        new Random(1).NextBytes(data);
+
+        var bytes = NCborSerializer.Serialize(data, _context.ArrayOfByte);
+
+        var reader = new CborReader(bytes);
+        reader.PeekState().Should().Be(CborReaderState.ByteString);
+    }
+
+    [Fact]
+    public void SerializeByteArray_AboveChunkThreshold_UsesIndefiniteLengthEncoding()
+    {
+        // 10,000 bytes exceeds the 4096-byte chunk threshold, so this should be written as an
+        // indefinite-length byte string composed of multiple chunks rather than one buffer.
+        var data = new byte[10_000];
+        new Random(2).NextBytes(data);
+
+        var bytes = NCborSerializer.Serialize(data, _context.ArrayOfByte);
+
+        var reader = new CborReader(bytes);
+        reader.PeekState().Should().Be(CborReaderState.StartIndefiniteLengthByteString);
+    }
+
+    [Fact]
+    public void RoundTrip_ByteArray_AboveChunkThreshold_PreservesAllBytes()
+    {
+        var data = new byte[10_000];
+        new Random(3).NextBytes(data);
+
+        var bytes = NCborSerializer.Serialize(data, _context.ArrayOfByte);
+        var deserialized = NCborSerializer.Deserialize(bytes, _context.ArrayOfByte);
+
+        deserialized.Should().BeEquivalentTo(data);
+    }
+
+    [Fact]
+    public void RoundTrip_ByteArray_ExactlyAtChunkBoundary_PreservesAllBytes()
+    {
+        // 4096 * 2 + a remainder exercises multiple full chunks plus a partial final chunk.
+        var data = new byte[4096 * 2 + 137];
+        new Random(4).NextBytes(data);
+
+        var bytes = NCborSerializer.Serialize(data, _context.ArrayOfByte);
+        var deserialized = NCborSerializer.Deserialize(bytes, _context.ArrayOfByte);
+
+        deserialized.Should().BeEquivalentTo(data);
+    }
 }

@@ -19,7 +19,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 ### 🎯 **Market Position Analysis**
 **Competitive Landscape Assessment:**
-- **vs Reflection-Based CBOR Libraries** (Dahomey.Cbor, PeterO.Cbor): **Clear Performance Advantage** - 5-10x faster in AOT scenarios
+- **vs Reflection-Based CBOR Libraries** (Dahomey.Cbor, PeterO.Cbor): AOT-compatible, zero-reflection architecture; a 5-10x speed advantage is the target but **unverified** — no benchmark suite exists yet ([GAPS.md](GAPS.md) GAP-3)
 - **vs High-Performance Serializers** (MessagePack-CSharp): **Complementary, not competitive** - serving CBOR standard requirements
 - **vs System.Text.Json**: **Strategic Alignment** - we ARE the System.Text.Json for CBOR
 
@@ -38,7 +38,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 #### Type Support (100% Complete) ✅
 - ✅ **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
-- ✅ **DateTime/DateTimeOffset**: CBOR Tag 0 (RFC 3339/ISO 8601) with UTC handling and timezone preservation
+- ✅ **DateTime/DateTimeOffset**: CBOR Tag 0 (RFC 3339/ISO 8601). `DateTimeOffset` preserves its offset; `DateTime` normalizes to UTC on write (Kind is not preserved — intentional, see [GAPS.md](GAPS.md) GAP-9)
 - ✅ **Guid**: 16-byte binary format serialization with System.Guid support
 - ✅ **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
 - ✅ **Dictionary<K,V>**: Complete key-value collection support with nullable variants
@@ -72,7 +72,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **173 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
+- ✅ **Comprehensive Test Suite**: **177 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
   - ✅ **NCborSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **NCborExceptionTests** (23+ tests): Custom exception types and integration
@@ -140,7 +140,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Current**: Efficient generated code, but no public performance proof
 - **Deliverables**:
   - **Public benchmark results** comparing vs Dahomey.Cbor, PeterO.Cbor
-  - **Throughput metrics** (ops/sec) showing 5-10x advantages
+  - **Throughput metrics** (ops/sec) measuring the actual advantage (target: 5-10x, unverified until this suite runs)
   - **Memory allocation analysis** (bytes/op) demonstrating efficiency
   - **AOT app size comparison** showing trimming benefits
   - **Startup time metrics** (crucial for serverless scenarios)
@@ -205,11 +205,15 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
   [GAPS.md](GAPS.md) GAP-3's benchmark suite existing first
 - **Priority**: DONE
 
-#### 2.5.3 Streaming API Foundation - **LOW PRIORITY** 🌊
+#### 2.5.3 Streaming API Foundation - **LOW PRIORITY** 🌊 — still open
 - **Status**: **NEW** - Identified for future scalability
 - **Analysis Finding**: Missing APIs for large data scenarios and progressive processing
 - **Description**: Add streaming serialization capabilities for large objects
-- **Current Limitation**: In-memory serialization only
+- **Current Limitation**: In-memory serialization only. **Not the same thing as** the
+  chunked-byte-string wire encoding fixed in Phase 2.5's byte[] handling ([GAPS.md](GAPS.md)
+  GAP-10, done 2026-07-04) — that chunks the CBOR encoding of an already-in-memory `byte[]`;
+  this item would mean accepting `Stream`/`IAsyncEnumerable` inputs so the full payload never
+  needs to be materialized at all. Still not implemented.
 - **Deliverables**:
   - `SerializeToStream<T>()` and `DeserializeFromStream<T>()` methods
   - Progressive serialization for large collections
@@ -336,7 +340,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Description**: Comprehensive performance analysis establishing performance leadership
 - **Market Impact**: Public benchmark results become our primary differentiation tool
 - **Target Outcomes**:
-  - **5-10x performance advantage** over reflection-based competitors
+  - **5-10x performance advantage** over reflection-based competitors (target, unverified — [GAPS.md](GAPS.md) GAP-3)
   - **Minimal memory allocation** demonstrating efficiency
   - **AOT deployment benefits** quantified
   - **Serverless startup time advantages** measured
@@ -465,7 +469,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Type Support**: ✅ **100%** (All critical types complete - DateTime, GUID, primitives, collections, Dictionary, Arrays, Enums)
 - **Attribute System**: ✅ **100%** (all 7 attribute mechanisms implemented, including the context-wide `DefaultIgnoreCondition` default and the `CBOR005` diagnostic for uncovered get-only properties)
 - **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
-- **Testing**: ✅ **100%** (173 tests covering all implemented features)
+- **Testing**: ✅ **100%** (177 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
@@ -493,7 +497,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 1. **🎯 Public Benchmarking Suite** (Phase 2.2) - **8-12 hours** ⚡ **CRITICAL**
    - **Market Impact**: Becomes our primary differentiation tool
    - **Technical**: BenchmarkDotNet suite vs Dahomey.Cbor, PeterO.Cbor
-   - **Deliverable**: Public performance proof of 5-10x advantages
+   - **Deliverable**: Public, measured performance numbers (5-10x is the target, not yet proven — [GAPS.md](GAPS.md) GAP-3)
    - **Success Criteria**: Quantified performance leadership documented
 
 #### **PRIORITY 2: Quality Foundation** 🛡️ — baseline ✅ done, benchmark gate still pending
@@ -581,7 +585,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 **Competitive Assessment**:
 - ✅ **Technical Excellence**: Source generation approach aligns with .NET's future direction
-- ✅ **Performance Leadership**: AOT compatibility provides 5-10x advantages over reflection-based competitors
+- ✅ **AOT Architecture**: Zero-reflection design; the theoretical 5-10x advantage over reflection-based competitors is unverified until [GAPS.md](GAPS.md) GAP-3's benchmark suite exists
 - ✅ **Strategic Timing**: Positioned ahead of the curve for Microsoft's AOT evolution
 - ✅ **Developer Experience**: Familiar System.Text.Json patterns lower adoption barriers
 
@@ -590,7 +594,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **AOT Compatibility**: Zero runtime reflection, fully compatible with Native AOT compilation
 - ✅ **API Design**: Clean, familiar API following System.Text.Json patterns exactly
 - ✅ **Build System**: Resolved complex circular dependency issues with proper project references
-- ✅ **Quality Assurance**: 173 comprehensive tests with 100% pass rate
+- ✅ **Quality Assurance**: 177 comprehensive tests with 100% pass rate
 
 ### Production Readiness Indicators ✅
 - ✅ **Functional Demo**: Working serialization of complex object graphs and collections
@@ -619,7 +623,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 
 **PHASE 1 (Next 14 Days): PERFORMANCE PROOF** 🏆
 - **Objective**: Establish quantified performance leadership
-- **Key Results**: Public benchmarks showing 5-10x advantages
+- **Key Results**: Public benchmarks measuring actual throughput vs. competitors (5-10x is the target, not a proven result — [GAPS.md](GAPS.md) GAP-3)
 - **Market Impact**: Becomes primary differentiation tool
 - **Technical Focus**: BenchmarkDotNet suite, CI/CD pipeline
 
@@ -638,7 +642,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### **🎯 Success Metrics & KPIs**
 
 **Technical Excellence**:
-- ✅ 173 tests passing (achieved)
+- ✅ 177 tests passing (achieved)
 - ✅ Zero reflection architecture (achieved)
 - 🎯 <5% performance overhead vs hand-written code (target)
 
@@ -686,7 +690,7 @@ Based on comprehensive multi-model analysis, the NCbor Serialization Library has
 
 **🎯 Perfect Market Niche**: Occupying the "System.Text.Json for CBOR" position with clear competitive advantages
 
-**⚡ Technical Excellence**: 99% feature complete with 173 passing tests, zero reflection architecture
+**⚡ Technical Excellence**: 99% feature complete with 177 passing tests, zero reflection architecture
 
 **🚀 Future-Aligned**: Source generation approach follows Microsoft's AOT evolution direction
 
@@ -695,8 +699,8 @@ Based on comprehensive multi-model analysis, the NCbor Serialization Library has
 ### **🎪 IMMEDIATE STRATEGIC FOCUS**
 
 **Next 30 Days = Market Leadership Establishment**:
-1. **Performance Proof** - Public benchmarks showing 5-10x advantages
-2. **Quality Foundation** - CI/CD pipeline preventing regression  
+1. **Performance Proof** - Public benchmarks measuring actual throughput (target 5-10x, unverified — [GAPS.md](GAPS.md) GAP-3)
+2. **Quality Foundation** - ✅ CI/CD baseline (build + test) done; benchmark regression gate still pending
 3. **Market Entry** - Professional NuGet packages for public adoption
 
 ### **🌟 LONG-TERM VISION SUCCESS**

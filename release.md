@@ -44,29 +44,54 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 ## NuGet Packaging
 
-### Preparing the Generator for NuGet
+### Packaging Metadata (already configured, as of 2026-07-04)
 
-1. **Update the Generator Project File**:
-   Add the following to `NCbor.Generator.csproj`:
-   ```xml
-   <PropertyGroup>
-       <IncludeBuildOutput>false</IncludeBuildOutput>
-       <IncludeAnalyzer>true</IncludeAnalyzer>
-   </PropertyGroup>
-   ```
+Both `NCbor.csproj` and `NCbor.Generator.csproj` already carry `PackageId`/`Version`/`Authors`/
+`Description`/`PackageLicenseExpression`/`PackageProjectUrl`/`PackageReadmeFile`. **Confirm
+`Authors` and `Version` match what you actually want before publishing** — `Authors` currently
+defaults to the GitHub org name as a placeholder.
 
-2. **Pack the Generator**:
-   ```bash
-   dotnet pack NCbor.Generator/NCbor.Generator.csproj
-   ```
+The generator project packs its DLL as an analyzer, not a normal library reference. The
+previous version of this doc described a nonexistent `<IncludeAnalyzer>true</IncludeAnalyzer>`
+MSBuild property — there is no such property. The actual pattern, already applied in
+`NCbor.Generator.csproj`:
+```xml
+<PropertyGroup>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <DevelopmentDependency>true</DevelopmentDependency>
+</PropertyGroup>
+
+<ItemGroup>
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+</ItemGroup>
+```
+This has been verified by actually running `dotnet pack` and inspecting the resulting `.nupkg`
+— the DLL lands under `analyzers/dotnet/cs/`, not `lib/`.
+
+### Building the Packages
+
+```bash
+dotnet pack NCbor/NCbor.csproj --configuration Release
+dotnet pack NCbor.Generator/NCbor.Generator.csproj --configuration Release
+```
+
+**Known issue to resolve before publishing** (see [GAPS.md](GAPS.md) GAP-12): packing `NCbor`
+currently emits `NU5104` — a stable `1.0.0` package shouldn't depend on the prerelease
+`System.Formats.Cbor 10.0.0-preview.5.25277.114`. Check whether a stable `System.Formats.Cbor`
+now exists for .NET 10 GA and update the reference before publishing a stable version.
 
 ### Publishing to NuGet
+
+**Not yet done for either package** — no version has ever been published (`git tag` is empty).
+This is a deliberate, credentialed action for whoever maintains the NuGet account, not something
+to run casually:
 
 1. **Create a NuGet Account** (if you don't have one).
 2. **Get Your API Key** from the NuGet website.
 3. **Publish the Package**:
    ```bash
-   dotnet nuget push NCbor.Generator/bin/Debug/NCbor.Generator.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
+   dotnet nuget push NCbor/bin/Release/NCbor.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
+   dotnet nuget push NCbor.Generator/bin/Release/NCbor.Generator.1.0.0.nupkg --api-key YOUR_API_KEY --source https://api.nuget.org/v3/index.json
    ```
 
 ### Using the NuGet Package

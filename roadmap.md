@@ -1,7 +1,11 @@
 # NCbor Serialization Library - Strategic Roadmap
 
-*Last Updated: 2025-06-23*  
+*Last Updated: 2026-07-04*  
 *Current Status: **v1.0 PRODUCTION READY - STRATEGIC POSITIONING COMPLETE!** 🎯*
+
+> For the flat, no-marketing-language checklist of what's actually done vs. stubbed vs.
+> missing, see **[GAPS.md](GAPS.md)** — treat this file as the strategic narrative and
+> GAPS.md as the "is it actually done yet" source of truth.
 
 ## 🎯 **Strategic Vision: The System.Text.Json for CBOR**
 
@@ -68,7 +72,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **148 tests, 0 failures** (updated with Array and Enum tests)
+- ✅ **Comprehensive Test Suite**: **152 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
   - ✅ **NCborSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **NCborExceptionTests** (23+ tests): Custom exception types and integration
@@ -149,7 +153,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 #### 2.3 CI/CD Pipeline Setup - **QUALITY ASSURANCE FOUNDATION**
 - **Status**: Ready to implement after benchmarking
 - **Description**: GitHub Actions workflow for automated testing and quality assurance
-- **Current**: Manual build and test process (all 148 tests passing)
+- **Current**: Manual build and test process (all 152 tests passing)
 - **Deliverables**:
   - Multi-target framework builds (.NET 8, .NET 10)
   - Automated test execution on PR/push
@@ -168,20 +172,25 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### Phase 2.5: **Production Hardening & Optimization** (15-30 Days)
 **Goal**: Address analysis-identified improvement opportunities for production robustness.
 
-#### 2.5.1 Circular Reference Protection - **MEDIUM PRIORITY** 🛡️
-- **Status**: **NEW** - Identified through architectural analysis
-- **Analysis Finding**: Missing protection against self-referencing objects (stack overflow risk)
-- **Description**: Implement circular reference detection for object graph safety
-- **Current Risk**: Potential StackOverflowException on complex object graphs
-- **Deliverables**:
-  - Reference tracking during serialization traversal
-  - Configurable depth limiting (default: 64 levels)
-  - Circular reference detection with descriptive error messages
-  - Performance-optimized reference tracking (HashSet<object>)
-  - Comprehensive test coverage for circular scenarios
-- **Effort**: 8-10 hours
-- **Dependencies**: Phase 2.3 (CI/CD pipeline for regression testing)
-- **Priority**: **MEDIUM** - Production safety and reliability
+#### 2.5.1 Circular Reference Protection - ✅ **COMPLETE** (2026-07-04)
+- **Status**: ✅ **DONE** — depth-limiting implemented and tested
+- **Description**: `NCborTypeInfo<T>.Serialize`/`Deserialize` carry an `int depth = 0` parameter;
+  every generated type checks `depth` against `NCborSourceGenerationOptionsAttribute.MaxDepth`
+  (default 64) and throws `NCborSerializationException`/`NCborDeserializationException` before
+  recursing further, on both the serialize and deserialize paths.
+- **Resolved Risk**: Self-referencing object graphs now throw a clear exception instead of a
+  `StackOverflowException`.
+- **Delivered**:
+  - ✅ Configurable depth limiting via `MaxDepth` (previously an unread stub, now wired up)
+  - ✅ Circular reference detection with descriptive error messages
+  - ✅ Test coverage: `NCbor.Tests/NCborCircularReferenceTests.cs` (true cycle, shallow acyclic
+    chain within limit, acyclic chain exceeding limit, deserialize-side depth guard)
+  - **Not delivered (deliberate scope cut)**: exact `HashSet<object>` reference-tracking. This
+    is depth-limiting, not cycle-detection — a legitimately deep-but-acyclic graph past
+    `MaxDepth` also throws (same tradeoff as `System.Text.Json`'s `MaxDepth`). See
+    [GAPS.md](GAPS.md) GAP-1 for the note on revisiting this if it causes false positives in
+    practice.
+- **Priority**: DONE — no longer blocking production hardening
 
 #### 2.5.2 Array Memory Optimization - **LOW PRIORITY** ⚡
 - **Status**: **NEW** - Identified through performance analysis
@@ -407,19 +416,10 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Dependencies**: Phase 6.1 (polymorphic serialization)
 - **Priority**: LOW - CBOR specification completeness
 
-#### 6.3 Circular Reference Detection - **MOVED TO PHASE 2** ⬆️
-- **Status**: **ELEVATED TO MEDIUM PRIORITY** based on comprehensive analysis
-- **Description**: Handle circular references in object graphs  
-- **Current**: No circular reference protection (potential stack overflow risk identified)
-- **Analysis Finding**: Medium priority security/reliability concern for production use
-- **Features**:
-  - Reference tracking during serialization
-  - Configurable depth limiting  
-  - Circular reference detection and prevention
-  - Reference preservation options
-- **Effort**: 10-12 hours
-- **Dependencies**: Phase 2.3 (CI/CD pipeline)
-- **Priority**: **MEDIUM** - Production safety requirement
+#### 6.3 Circular Reference Detection - ✅ **COMPLETE, see Phase 2.5.1**
+- **Status**: ✅ **DONE** (2026-07-04) — implemented as depth limiting, not exact reference
+  tracking. See Phase 2.5.1 above and [GAPS.md](GAPS.md) GAP-1 for the delivered scope and the
+  known tradeoff on legitimately deep acyclic graphs.
 
 ---
 
@@ -431,7 +431,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Excellent Architecture**: Source generation approach follows modern .NET patterns perfectly
 - ✅ **High Code Quality**: 7,214 lines with minimal technical debt, comprehensive test coverage
 - ✅ **Strong Performance Foundation**: Efficient generated code with direct method dispatch
-- ⚠️ **Production Hardening Needed**: Circular reference detection identified as medium priority
+- ✅ **Production Hardening Delivered**: Circular reference detection (depth limiting) implemented 2026-07-04
 - 🔧 **Optimization Opportunities**: Array memory allocation and streaming APIs for future enhancement
 
 ### **Strategic Adjustments Made**
@@ -464,7 +464,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Type Support**: ✅ **100%** (All critical types complete - DateTime, GUID, primitives, collections, Dictionary, Arrays, Enums)
 - **Attribute System**: ⚠️ **65%** (4/7 attributes fully implemented)
 - **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
-- **Testing**: ✅ **100%** (148 tests covering all implemented features)
+- **Testing**: ✅ **100%** (152 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
@@ -506,12 +506,12 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
    - **Technical**: API reference, performance documentation, migration guides
    - **Deliverable**: Documentation worthy of market leadership position
 
-#### **NEW PRIORITY 3: Production Hardening** 🛡️ *(Analysis-Driven)*
-4. **🎯 Circular Reference Protection** (Phase 2.5.1) - **8-10 hours** ⚠️ **MEDIUM PRIORITY**
-   - **Analysis Finding**: Stack overflow risk identified in object graph traversal
-   - **Production Impact**: Critical for enterprise and complex application scenarios
-   - **Technical**: Reference tracking with configurable depth limiting
-   - **Deliverable**: Production-safe object graph serialization
+#### **PRIORITY 3: Production Hardening** 🛡️ — ✅ **COMPLETE** (2026-07-04)
+4. **🎯 Circular Reference Protection** (Phase 2.5.1) - ✅ **DONE**
+   - **Resolved**: Stack overflow risk on self-referencing object graphs
+   - **Production Impact**: Object graph serialization is now depth-guarded by default
+   - **Technical**: Configurable depth limiting via `NCborSourceGenerationOptionsAttribute.MaxDepth`
+   - **Deliverable**: Production-safe object graph serialization — delivered
 
 ### **IMMEDIATE COMPLETED FOUNDATIONS** ✅
 - ✅ **Enhanced Error Handling** (Phase 2.1) - **COMPLETED** ⭐
@@ -637,7 +637,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### **🎯 Success Metrics & KPIs**
 
 **Technical Excellence**:
-- ✅ 148 tests passing (achieved)
+- ✅ 152 tests passing (achieved)
 - ✅ Zero reflection architecture (achieved)
 - 🎯 <5% performance overhead vs hand-written code (target)
 

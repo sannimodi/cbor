@@ -88,3 +88,21 @@ For new type support, use the **experimental validation first** approach:
 - `byte[]` is a special case: treated as a built-in type using CBOR byte string (major type 2) via `WriteByteString`/`ReadByteString`, not element-by-element like other arrays. Nullable `byte[]?` is handled inline with null checks.
 - Enums serialize as their underlying numeric type, not as strings
 - Three custom exception types: `NCborSerializationException`, `NCborDeserializationException`, `NCborValidationException`
+
+## Known Gaps
+
+`GAPS.md` at the repo root is the maintained, non-aspirational checklist of what's actually
+implemented vs. stubbed vs. missing — it exists because README.md/roadmap.md/
+cbor-serialization-specs.md have previously described unimplemented behavior as done. Before
+stating a feature is complete or fixed, check `GAPS.md`; some attribute classes exist
+(`NCborConverterAttribute`, `NCborConstructorAttribute`, `NCborDefaultValueAttribute`) but are
+never read by the generator, which does not count as implemented. When you close a gap, update
+`GAPS.md` and whichever doc made the original claim so they stay in sync.
+
+`NCborSourceGenerationOptionsAttribute.MaxDepth` (previously an unread stub) is now wired up:
+`NCborTypeInfo<T>.Serialize`/`Deserialize` take an `int depth = 0` parameter, every generated
+`{Type}TypeInfo` checks it against `MaxDepth` and throws `NCborSerializationException`/
+`NCborDeserializationException` before recursing further, and every nested `.Serialize`/
+`.Deserialize` call passes `depth + 1`. This is depth-limiting, not exact cycle detection — a
+legitimately deep-but-acyclic graph past `MaxDepth` also throws (same tradeoff as
+`System.Text.Json`'s `MaxDepth`). See `NCbor.Tests/NCborCircularReferenceTests.cs`.

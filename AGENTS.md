@@ -19,5 +19,8 @@ Follow the existing C# style in-tree: file-scoped namespaces, nullable enabled, 
 ## Testing Guidelines
 Tests use xUnit with FluentAssertions. Follow the existing `Method_Scenario_ExpectedResult` naming pattern, for example `Deserialize_ValidCborData_ReturnsCorrectModel`. Add focused tests beside the relevant area (`NCborArrayTests.cs`, `SourceGeneratorTests.cs`, etc.). Any change in `NCbor.Generator/` should include runtime coverage in `NCbor.Tests/`, and complex serialization features should be proven in `NCborSample/` first when practical.
 
+## Known Gaps
+`GAPS.md` at the repo root is the maintained checklist of doc/implementation mismatches and unfinished attributes (e.g. `NCborConverterAttribute`, `NCborConstructorAttribute`, `NCborDefaultValueAttribute` are defined but not read by the generator). Check it before claiming a feature is complete, and update it — plus whichever doc made the original claim — when you close a gap. Circular reference protection (depth limiting via `NCborSourceGenerationOptionsAttribute.MaxDepth`) was implemented 2026-07-04; see `NCbor.Tests/NCborCircularReferenceTests.cs`.
+
 ## Commit & Pull Request Guidelines
 Recent history follows short, imperative, Conventional Commit-style prefixes such as `feat:` and `docs:`. Keep commits scoped and readable. There is no PR template in the repo, so include: what changed, why it changed, linked issue(s), and the commands you ran. Include sample payloads or screenshots only when demo or API behavior changed.

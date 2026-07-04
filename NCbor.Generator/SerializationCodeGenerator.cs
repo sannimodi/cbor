@@ -27,7 +27,7 @@ internal static class SerializationCodeGenerator
             else
             {
                 builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(elementType)}.Serialize(writer, item);");
+                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(elementType)}.Serialize(writer, item, depth + 1);");
             }
             builder.AppendLine("}");
             builder.AppendLine("writer.WriteEndArray();");
@@ -50,7 +50,7 @@ internal static class SerializationCodeGenerator
             else
             {
                 builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Serialize(writer, item);");
+                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Serialize(writer, item, depth + 1);");
             }
             builder.AppendLine("}");
             builder.AppendLine("writer.WriteEndArray();");
@@ -73,9 +73,9 @@ internal static class SerializationCodeGenerator
             }
             else
             {
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(keyType)}.Serialize(writer, kvp.Key);");
+                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(keyType)}.Serialize(writer, kvp.Key, depth + 1);");
             }
-            
+
             // Serialize value
             builder.AppendLine("    // Serialize value");
             if (IsBuiltInType(valueType))
@@ -84,7 +84,7 @@ internal static class SerializationCodeGenerator
             }
             else
             {
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(valueType)}.Serialize(writer, kvp.Value);");
+                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(valueType)}.Serialize(writer, kvp.Value, depth + 1);");
             }
             
             builder.AppendLine("}");
@@ -132,7 +132,7 @@ internal static class SerializationCodeGenerator
             else
             {
                 builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(elementType)}.Deserialize(reader);");
+                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(elementType)}.Deserialize(reader, depth + 1);");
             }
             builder.AppendLine("    list.Add(item);");
             builder.AppendLine("}");
@@ -160,7 +160,7 @@ internal static class SerializationCodeGenerator
             else
             {
                 builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Deserialize(reader);");
+                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Deserialize(reader, depth + 1);");
             }
             builder.AppendLine("    list.Add(item);");
             builder.AppendLine("}");
@@ -188,9 +188,9 @@ internal static class SerializationCodeGenerator
             }
             else
             {
-                builder.AppendLine($"    var key = {contextRef}.{GetPropertyNameFromType(keyType)}.Deserialize(reader);");
+                builder.AppendLine($"    var key = {contextRef}.{GetPropertyNameFromType(keyType)}.Deserialize(reader, depth + 1);");
             }
-            
+
             // Deserialize value
             builder.AppendLine("    // Deserialize value");
             if (IsBuiltInType(valueType))
@@ -199,7 +199,7 @@ internal static class SerializationCodeGenerator
             }
             else
             {
-                builder.AppendLine($"    var value = {contextRef}.{GetPropertyNameFromType(valueType)}.Deserialize(reader);");
+                builder.AppendLine($"    var value = {contextRef}.{GetPropertyNameFromType(valueType)}.Deserialize(reader, depth + 1);");
             }
             
             builder.AppendLine("    dictionary.Add(key, value);");
@@ -286,17 +286,17 @@ internal static class SerializationCodeGenerator
             if (arrayElementType == null)
                 throw new InvalidOperationException("Element type cannot be null for a valid array type.");
                 
-            return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name});";
+            return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name}, depth + 1);";
         }
-        
+
         // Handle nullable arrays
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated && 
+        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&
             IsArray(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated), out var nullableArrayElementType))
         {
             if (nullableArrayElementType == null)
                 throw new InvalidOperationException("Element type cannot be null for a valid nullable array type.");
-                
-            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}); }} else {{ writer.WriteNull(); }}";
+
+            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}, depth + 1); }} else {{ writer.WriteNull(); }}";
         }
         
         // Handle nullable built-in types
@@ -313,11 +313,11 @@ internal static class SerializationCodeGenerator
         // Handle nullable reference types (like Dictionary<string, string>?)
         if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
         {
-            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}); }} else {{ writer.WriteNull(); }}";
+            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}, depth + 1); }} else {{ writer.WriteNull(); }}";
         }
-        
+
         // Handle complex types via context reference
-        return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name});";
+        return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name}, depth + 1);";
     }
 
     private static string GeneratePropertyDeserialization(IPropertySymbol property)
@@ -346,18 +346,18 @@ internal static class SerializationCodeGenerator
             if (arrayElementType == null)
                 throw new InvalidOperationException("Element type cannot be null for a valid array type.");
                 
-            return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader)";
+            return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader, depth + 1)";
         }
-        
+
         // Handle nullable arrays
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated && 
+        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&
             IsArray(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated), out var nullableArrayElementType))
         {
             if (nullableArrayElementType == null)
                 throw new InvalidOperationException("Element type cannot be null for a valid nullable array type.");
-                
+
             var nonNullableType = type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated);
-            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader)";
+            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader, depth + 1)";
         }
         
         // Handle nullable built-in types
@@ -381,11 +381,11 @@ internal static class SerializationCodeGenerator
         if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
         {
             var nonNullableType = type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated);
-            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader)";
+            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader, depth + 1)";
         }
-        
+
         // Handle complex types via context reference
-        return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader)";
+        return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader, depth + 1)";
     }
 
     private static bool IsList(ITypeSymbol typeSymbol, out ITypeSymbol? elementType)

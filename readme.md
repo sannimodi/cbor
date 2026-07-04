@@ -8,9 +8,9 @@ The only AOT-compliant, reflection-free CBOR serializer for .NET, utilizing Syst
 
 **Strategic Position**: Modern, high-performance CBOR serialization designed for the future of .NET - AOT-first, zero reflection, maximum performance.
 
-**Status**: Production-ready with 141 passing tests and comprehensive type support.
+**Status**: Production-ready with 152 passing tests and comprehensive type support.
 
-See the [specification document](cbor-serialization-specs.md) for learning more about the design and features.
+See the [specification document](cbor-serialization-specs.md) for learning more about the design and features, and [GAPS.md](GAPS.md) for the current, honest list of what's still missing or half-implemented.
 
 ## ✨ **Why Choose This Library?**
 
@@ -32,7 +32,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 - ✅ Support for .NET primitive types and collections
 - ✅ Efficient binary serialization with CBOR compliance
 - ✅ Native AOT support and trimming-friendly
-- ✅ Comprehensive test suite (148 tests, 0 failures)
+- ✅ Comprehensive test suite (152 tests, 0 failures)
 - ✅ Full nullable type support
 - ✅ Rich attribute system (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ 7 naming policies (CamelCase, SnakeCase, KebabCase, etc.)
@@ -41,31 +41,31 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 
 ```
 ├── NCbor/              # Main library project
-│   ├── Attributes/                 # Serialization attributes
-│   ├── CborSerializer.cs           # Static serialization API
-│   ├── CborSerializerContext.cs    # Base context class
-│   └── CborTypeInfo.cs             # Type metadata container
+│   ├── NCbor.cs                     # Static serialization API (NCborSerializer)
+│   ├── NCborContext.cs              # Base context class (NCborSerializerContext)
+│   ├── NCborTypeInfo.cs             # Type metadata container
+│   └── NCbor*Attribute.cs           # Serialization attributes
 │
 ├── NCbor.Generator/    # Source generator project
-│   ├── CborSourceGenerator.cs      # Incremental source generator
+│   ├── NCborSourceGenerator.cs      # Incremental source generator
 │   └── SerializationCodeGenerator.cs # Code generation logic
 │
-├── NCbor.Tests/       # Comprehensive test suite (148 tests)
-│   ├── CborSerializerTests.cs      # Core serialization tests
-│   ├── CborSerializerErrorTests.cs # Error handling tests
+├── NCbor.Tests/       # Comprehensive test suite (152 tests)
+│   ├── NCborTests.cs                # Core serialization tests
+│   ├── NCborErrorTests.cs           # Error handling tests
 │   ├── NCborDictionaryTests.cs      # Dictionary serialization tests
 │   ├── NCborDecimalTests.cs         # Decimal serialization tests
-│   ├── AttributeTests.cs           # Attribute functionality tests
+│   ├── NCborAttributeTests.cs       # Attribute functionality tests
 │   ├── SourceGeneratorTests.cs     # Generator validation tests
 │   └── TestModels.cs               # Test model definitions
 │
 ├── NCbor.Demo/        # Working demo project
 │   ├── Program.cs                  # Demonstrates serialization
-│   ├── Domain.cs                   # Domain model definitions
-│   └── MyCborContext.cs            # Context implementation
+│   ├── Domain/                     # Domain model definitions
+│   └── MyContext.cs                # Context implementation
 │
-└── CborSample/                    # Reference implementation
-    └── Person.Cbor.g.cs            # Manual implementation example
+└── NCborSample/                    # Manual reference implementation
+    └── Domain/Person.cs            # Used to validate new type support before generator changes
 ```
 
 ## Requirements
@@ -88,15 +88,15 @@ dotnet add package NCbor.Generator
 1. Define your model:
 
 ```csharp
-[CborSerializable]
+[NCborSerializable]
 public class Person
 {
-    [CborPropertyName("full_name")]
+    [NCborPropertyName("full_name")]
     public string Name { get; set; }
     
     public int Age { get; set; }
     
-    [CborIgnore]
+    [NCborIgnore]
     public string InternalId { get; set; }
 }
 ```
@@ -104,11 +104,11 @@ public class Person
 2. Create a context:
 
 ```csharp
-[CborSerializable(typeof(Person))]
-[CborSourceGenerationOptions(
-    PropertyNamingPolicy = CborKnownNamingPolicy.CamelCase
+[NCborSerializable(typeof(Person))]
+[NCborSourceGenerationOptions(
+    PropertyNamingPolicy = NCborNamingPolicy.CamelCase
 )]
-public partial class MyCborContext : CborSerializerContext
+public partial class MyContext : NCborSerializerContext
 {
 }
 ```
@@ -117,10 +117,10 @@ public partial class MyCborContext : CborSerializerContext
 
 ```csharp
 // Serialization
-byte[] cborData = CborSerializer.Serialize(person, MyCborContext.Default.Person);
+byte[] cborData = NCborSerializer.Serialize(person, MyContext.Default.Person);
 
 // Deserialization
-Person? person = CborSerializer.Deserialize<Person>(cborData, MyCborContext.Default.Person);
+Person? person = NCborSerializer.Deserialize<Person>(cborData, MyContext.Default.Person);
 ```
 
 ### Property Naming Policies
@@ -138,7 +138,7 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 ## 🏆 **v1.0 Production Status - COMPLETE!**
 
 ### 📊 **Technical Excellence Metrics**
-- **141 Tests Passing** (0 failures) - Comprehensive coverage
+- **152 Tests Passing** (0 failures) - Comprehensive coverage
 - **99% Feature Complete** - All critical functionality implemented
 - **Zero Reflection** - Fully AOT compatible architecture
 - **Modern .NET Patterns** - Following System.Text.Json design
@@ -158,8 +158,8 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 - **Maintainability**: ✅ **Excellent** - Clear separation of concerns, follows .NET patterns
 - **Extensibility**: ✅ **High** - Easy to add new types using established patterns  
 - **Performance**: ✅ **Optimized** - Efficient generated code with minimal allocations
-- **Testability**: ✅ **Comprehensive** - 148 tests covering all scenarios
-- **Technical Debt**: ✅ **Minimal** - No TODO/HACK/FIXME markers found in codebase
+- **Testability**: ✅ **Comprehensive** - 152 tests covering all scenarios
+- **Technical Debt**: ✅ **Minimal** - no TODO/HACK/FIXME markers in hand-written code (the generator does emit a `// TODO` placeholder comment for any type that falls outside `IsBuiltInType()`, which is expected behavior, not debt)
 
 ### 🔧 **Implementation Excellence**
 - **Source Generation Strategy**: Uses incremental source generators effectively, following .NET 5+ best practices
@@ -169,18 +169,17 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 
 ### ⚠️ **Identified Improvement Opportunities**
 
-**🔴 Medium Priority**
-- **Circular Reference Detection**: Missing protection against self-referencing objects (potential stack overflow risk)
-
-**🟡 Low Priority**  
+**🟡 Low Priority**
 - **Array Memory Optimization**: Uses `List<T>` intermediary for array deserialization (allocation overhead for large arrays)
 - **Streaming Support**: Missing APIs for large data scenarios and progressive processing
 
+See [GAPS.md](GAPS.md) for the full, current list — circular reference detection (previously
+listed here as medium priority) was implemented 2026-07-04 via configurable depth limiting.
+
 ### 🎯 **Strategic Recommendations**
-1. **Add circular reference detection** for object graph safety in complex scenarios
-2. **Optimize array handling** for memory efficiency with direct array allocation
-3. **Consider streaming APIs** for large data processing capabilities
-4. **Maintain current architecture** - foundation is excellent and evolving successfully
+1. **Optimize array handling** for memory efficiency with direct array allocation
+2. **Consider streaming APIs** for large data processing capabilities
+3. **Maintain current architecture** - foundation is excellent and evolving successfully
 
 ### 🎯 **Strategic Market Position**
 **Target Audience**: Modern .NET developers who value performance, AOT compatibility, and clean, type-safe code.
@@ -208,13 +207,13 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
   - ✅ Complex nested object hierarchies
 - ✅ **Custom attributes support** (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with **141 passing tests, 0 failures** covering all functionality
+- ✅ **Comprehensive test suite** with **152 passing tests, 0 failures** covering all functionality
 - ✅ **Production-ready error handling** with custom exception types and contextual error messages
 - ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Working demo project** demonstrates real-world serialization scenarios
 
 **Quality Metrics:**
-- **Test Coverage**: 141 comprehensive tests with 100% pass rate
+- **Test Coverage**: 152 comprehensive tests with 100% pass rate
 - **AOT Verified**: Zero runtime reflection, fully compatible with Native AOT
 - **Production Ready**: Robust error handling, comprehensive type support
 - **Developer Experience**: Clean API following System.Text.Json patterns
@@ -224,7 +223,7 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 The library is designed to work with Native AOT. To use it in an AOT project:
 
 1. Add the source generator package
-2. Create a context class with `[CborSerializable]` attributes
+2. Create a context class with `[NCborSerializable]` attributes
 3. Use the generated serialization methods
 
 ## Type Support
@@ -241,7 +240,7 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 - **Custom classes and structs** with source generation
 - **Nullable types** (int?, bool?, decimal?, DateTime?, Guid?, etc.) with auto-generated helper methods
 - **Nested objects** and complex type hierarchies
-- **Custom attributes**: CborPropertyName, CborIgnore, CborDefaultValue
+- **Custom attributes**: NCborPropertyName, NCborIgnore, NCborDefaultValue (definition-only — see [GAPS.md](GAPS.md) GAP-6)
 
 ### 🚀 **Performance & Benchmarking** (Coming in v1.1)
 **Next Priority**: Comprehensive benchmarking suite showing performance advantages:
@@ -261,7 +260,7 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 
 The library provides production-ready error handling:
 - ✅ **Custom Exception Types** with contextual information:
-  - `NCborException` - Serialization failures with type information
+  - `NCborSerializationException` - Serialization failures with type information
   - `NCborDeserializationException` - Deserialization failures with type information  
   - `NCborValidationException` - Data validation failures with property context
 - ✅ **Enhanced NCborSerializer** with proper exception chaining and detailed error messages
@@ -288,7 +287,7 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (148 tests)
+# Run the comprehensive test suite (152 tests)
 dotnet test NCbor.Tests/
 
 # Run the demo
@@ -297,7 +296,7 @@ dotnet run --project NCbor.Demo/
 
 ## Test Results
 
-The library includes a comprehensive test suite with **148 tests, 0 failures**:
+The library includes a comprehensive test suite with **152 tests, 0 failures**:
 
 - **NCborSerializerTests** (12+ tests): Core serialization functionality
 - **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases  

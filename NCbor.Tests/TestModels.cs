@@ -190,6 +190,12 @@ public class EnumModel
     public string Name { get; set; } = string.Empty;
 }
 
+public class SelfRefNode
+{
+    public string Name { get; set; } = string.Empty;
+    public SelfRefNode? Next { get; set; }
+}
+
 // Test context for source generator
 [NCborSerializable(typeof(SimpleModel))]
 [NCborSerializable(typeof(GuidModel))]

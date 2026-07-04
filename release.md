@@ -7,7 +7,7 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 ## Project Structure
 
 - **NCbor**: The main runtime library that provides the core serialization logic and base classes.
-- **NCbor.Generator**: A source generator project that analyzes types marked with `[CborSerializable]` and generates optimized serialization/deserialization code.
+- **NCbor.Generator**: A source generator project that analyzes types marked with `[NCborSerializable]` and generates optimized serialization/deserialization code.
 - **NCbor.Demo**: A demo project showcasing the usage of the library.
 
 ## Local Development
@@ -81,13 +81,13 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 ### How It Works
 
-- The source generator analyzes types marked with `[CborSerializable]`.
+- The source generator analyzes types marked with `[NCborSerializable]`.
 - It generates optimized serialization and deserialization methods.
 - The generated code is added to the project during the build process.
 
 ### Key Components
 
-- **CborSourceGenerator**: The main generator class that implements `IIncrementalGenerator`.
+- **NCborSourceGenerator**: The main generator class that implements `IIncrementalGenerator`.
 - **SerializationCodeGenerator**: Generates the serialization and deserialization code.
 
 ## Troubleshooting
@@ -98,10 +98,9 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 ## Future Enhancements
 
-- Support for more complex types.
+- Support for more complex types (see [GAPS.md](GAPS.md) for the current tracked list).
 - Advanced error handling.
-- Comprehensive test suite.
-- Performance optimizations.
+- Performance optimizations (benchmarking suite not yet built — GAPS.md GAP-3).
 
 ## License
 
@@ -109,5 +108,5 @@ This project is licensed under the terms of the LICENSE file.
 
 ---
 
-For more details, refer to the [specification document](cbor-serialization-specs.md). 
+For more details, refer to the [specification document](cbor-serialization-specs.md) and [GAPS.md](GAPS.md) for what's actually implemented versus planned.
 

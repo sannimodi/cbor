@@ -267,31 +267,41 @@ Utilize System.Formats.Cbor classes:
 - Guid
 - Decimal (preserve full precision)
 - Nested generic types (e.g., List<Dictionary<string, T>>)
-- Large binary data (byte arrays with efficient chunking)
+- Large binary data (byte arrays; chunking is planned, not yet implemented — see [GAPS.md](GAPS.md) GAP-10)
 
 ### 7.2 Type Serialization Details
 
+*Status legend: ✅ Implemented today · 🔲 Planned, not yet implemented — see [GAPS.md](GAPS.md)
+for the tracked fix. This section describes the target design; do not read a bullet as "already
+true" without checking the status.*
+
 #### DateTime Handling
-- DateTime values are serialized as ISO 8601 strings
-- DateTimeOffset includes timezone information
-- Support for UTC and local time conversions
-- Preserve DateTimeKind information
+- ✅ DateTime values are serialized as ISO 8601 strings (CBOR Tag 0)
+- ✅ DateTimeOffset includes timezone information
+- ✅ Support for UTC and local time conversions
+- 🔲 Preserve `DateTimeKind` information — **not currently true**: the generator forces
+  `Unspecified → Utc` then calls `.ToUniversalTime()` before writing, so a `Local` value's
+  original Kind is not recoverable after deserialization ([GAPS.md](GAPS.md) GAP-9)
 
 #### Enum Handling
-- Default serialization as underlying numeric values
-- Optional string serialization via attribute
-- Support for [Flags] enums
-- Handle invalid enum values gracefully
+- ✅ Default serialization as underlying numeric values
+- 🔲 Optional string serialization via attribute — no such attribute or code path exists yet;
+  enums always serialize as their numeric value ([GAPS.md](GAPS.md) GAP-8)
+- ✅ Support for [Flags] enums
+- ✅ Handle invalid enum values gracefully
 
 #### Decimal and Floating-Point
-- Decimal: Preserve full precision (28-29 significant digits)
-- Double/Float: Use standard IEEE 754 representation
-- Handle special values (NaN, Infinity) appropriately
+- ✅ Decimal: Preserve full precision (28-29 significant digits) via CBOR Tag 4
+- ✅ Double/Float: Use standard IEEE 754 representation
+- ✅ Handle special values (NaN, Infinity) appropriately
 
 #### Binary Data
-- Efficient handling of large byte arrays
-- Support for chunked serialization
-- Memory-efficient streaming for large binary data
+- ✅ Efficient handling of byte arrays via native CBOR byte string (major type 2)
+- 🔲 Support for chunked serialization — not implemented; a single unconditional
+  `writer.WriteByteString(value)` call handles all byte[] values regardless of size
+  ([GAPS.md](GAPS.md) GAP-10)
+- 🔲 Memory-efficient streaming for large binary data — same gap as above, no streaming API
+  exists ([GAPS.md](GAPS.md) GAP-10)
 
 ---
 

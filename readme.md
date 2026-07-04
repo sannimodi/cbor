@@ -1,5 +1,7 @@
 # CBOR Serialization Library
 
+[![Build and Test](https://github.com/atcults/cbor/actions/workflows/build.yml/badge.svg)](https://github.com/atcults/cbor/actions/workflows/build.yml)
+
 **🎉 v1.0 PRODUCTION READY - ALL CORE FEATURES COMPLETE!**
 
 ## 🎯 **The System.Text.Json for CBOR**

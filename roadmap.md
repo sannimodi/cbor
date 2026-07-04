@@ -90,7 +90,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Demo Verification**: Both Demo and Sample projects run successfully
 
 #### Error Handling (100% Complete) ✅
-- ✅ **Custom Exception Types**: NCborException, NCborDeserializationException, NCborValidationException with contextual information
+- ✅ **Custom Exception Types**: NCborSerializationException, NCborDeserializationException, NCborValidationException with contextual information
 - ✅ **Enhanced NCborSerializer**: Proper exception chaining with detailed error messages
 - ✅ **Parameter Validation**: ArgumentNullException for null inputs
 - ✅ **CBOR Format Validation**: Descriptive error messages for invalid data
@@ -150,20 +150,22 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Dependencies**: ✅ Phase 2.1 complete (exception types implemented)
 - **Priority**: **CRITICAL** - Essential for market leadership claims
 
-#### 2.3 CI/CD Pipeline Setup - **QUALITY ASSURANCE FOUNDATION**
-- **Status**: Ready to implement after benchmarking
+#### 2.3 CI/CD Pipeline Setup - ✅ **BASELINE COMPLETE** (2026-07-04)
+- **Status**: ✅ **DONE** (baseline) — `.github/workflows/build.yml` builds (`Release`) and runs
+  `NCbor.Tests` on every push/PR to `main`, uploading `.trx` test results as an artifact.
+  README carries a live build-status badge.
 - **Description**: GitHub Actions workflow for automated testing and quality assurance
-- **Current**: Manual build and test process (all 152 tests passing)
-- **Deliverables**:
-  - Multi-target framework builds (.NET 8, .NET 10)
-  - Automated test execution on PR/push
-  - **Benchmark regression testing** (prevents performance degradation)
-  - Code coverage reporting  
-  - NuGet package generation workflow
-  - Build status badges
-- **Effort**: 4-6 hours
-- **Dependencies**: Phase 2.2 (benchmarking suite)
-- **Priority**: HIGH - Required for sustainable development
+- **Delivered**:
+  - ✅ Automated test execution on PR/push
+  - ✅ Build status badge in README.md
+- **Not yet delivered (deliberately deferred, not blocking)**:
+  - Multi-target framework builds (.NET 8, .NET 10) — currently `ubuntu-latest` + the SDK's
+    default `.NET 10.0.x` only; the library has no OS-specific code so this is low-risk to defer
+  - Benchmark regression testing — depends on Phase 2.2 (benchmarking suite) actually existing
+    first; see [GAPS.md](GAPS.md) GAP-3
+  - Code coverage reporting
+  - NuGet package generation/publish workflow — tracked separately as [GAPS.md](GAPS.md) GAP-12
+- **Priority**: DONE (baseline) — remaining items depend on Phase 2.2 and GAP-12, not on this
 
 ## 🔍 **NEW: Analysis-Driven Improvements** (Based on Comprehensive Codebase Analysis)
 
@@ -454,7 +456,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Phase 1 (Foundation)**: ✅ **100% Complete** 
 - **Phase 2.1 (Testing)**: ✅ **100% Complete**
 - **Phase 2.1 (Error Handling)**: ✅ **100% Complete** (custom exception types implemented)
-- **Phase 2.2 (CI/CD)**: ❌ **0% Complete**
+- **Phase 2.3 (CI/CD)**: ✅ **Baseline Complete** (build + test automation; benchmarking gate, coverage, and publish workflow still pending)
 - **Phase 3 (Extended Types)**: ✅ **100% Complete** (DateTime, GUID, List<T>, Dictionary<K,V>, Arrays, Enums complete!)
 - **Phase 4 (Advanced Features)**: ⚠️ **40% Complete** (basic attributes, need full implementation)
 - **Phase 5 (Production Ready)**: ❌ **0% Complete** (performance benchmarking, package management, and enhanced docs needed)
@@ -468,7 +470,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
-- **CI/CD Pipeline**: ❌ **0%** (no automated build, test, or release pipeline)
+- **CI/CD Pipeline**: ⚠️ **60%** (automated build + test on push/PR via `.github/workflows/build.yml`; no benchmark gate, coverage reporting, or release/publish workflow yet)
 - **Performance & Benchmarking**: ❌ **0%** (no benchmarks, profiling, or optimization)
 - **Package Management**: ❌ **0%** (no NuGet packages, versioning, or distribution strategy)
 
@@ -495,11 +497,11 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
    - **Deliverable**: Public performance proof of 5-10x advantages
    - **Success Criteria**: Quantified performance leadership documented
 
-#### **PRIORITY 2: Quality Foundation** 🛡️
-2. **🎯 CI/CD Pipeline Enhancement** (Phase 2.3) - **4-6 hours**
-   - **Strategic Value**: Prevents performance regression, maintains quality
-   - **Technical**: GitHub Actions with benchmark validation gates
-   - **Deliverable**: Automated quality assurance preventing degradation
+#### **PRIORITY 2: Quality Foundation** 🛡️ — baseline ✅ done, benchmark gate still pending
+2. **🎯 CI/CD Pipeline Enhancement** (Phase 2.3) - baseline **DONE**, remaining **2-4 hours**
+   - **Delivered**: `.github/workflows/build.yml` runs build + full test suite on every push/PR
+   - **Still Pending**: benchmark validation gate (needs Priority 1's benchmark suite to exist first)
+   - **Deliverable**: Automated quality assurance preventing regressions — build/test half shipped
 
 3. **🎯 Enhanced Documentation** - **4-6 hours**
    - **Market Impact**: Professional presentation of performance advantages
@@ -589,7 +591,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **AOT Compatibility**: Zero runtime reflection, fully compatible with Native AOT compilation
 - ✅ **API Design**: Clean, familiar API following System.Text.Json patterns exactly
 - ✅ **Build System**: Resolved complex circular dependency issues with proper project references
-- ✅ **Quality Assurance**: 141 comprehensive tests with 100% pass rate
+- ✅ **Quality Assurance**: 152 comprehensive tests with 100% pass rate
 
 ### Production Readiness Indicators ✅
 - ✅ **Functional Demo**: Working serialization of complex object graphs and collections
@@ -658,7 +660,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ Core .NET types supported (ACHIEVED)
 - ✅ Custom exception types implemented (ACHIEVED)
 - 🎯 **Public benchmark results published** (CRITICAL)
-- 🎯 **CI/CD pipeline with performance gates** (HIGH PRIORITY)
+- ✅ **CI/CD pipeline baseline** (build + test automation, ACHIEVED) — 🎯 performance gates still pending on the benchmark suite
 - 🎯 **NuGet packages publicly available** (MARKET ENTRY)
 - 🎯 **Performance leadership documented** (DIFFERENTIATION)
 
@@ -685,7 +687,7 @@ Based on comprehensive multi-model analysis, the NCbor Serialization Library has
 
 **🎯 Perfect Market Niche**: Occupying the "System.Text.Json for CBOR" position with clear competitive advantages
 
-**⚡ Technical Excellence**: 99% feature complete with 141 passing tests, zero reflection architecture
+**⚡ Technical Excellence**: 99% feature complete with 152 passing tests, zero reflection architecture
 
 **🚀 Future-Aligned**: Source generation approach follows Microsoft's AOT evolution direction
 

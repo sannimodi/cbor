@@ -196,6 +196,54 @@ public class SelfRefNode
     public SelfRefNode? Next { get; set; }
 }
 
+public class UnixSecondsDateTimeConverter : INCborConverter<DateTime>
+{
+    public void Write(CborWriter writer, DateTime value)
+    {
+        var seconds = new DateTimeOffset(value.ToUniversalTime()).ToUnixTimeSeconds();
+        writer.WriteInt64(seconds);
+    }
+
+    public DateTime Read(CborReader reader)
+    {
+        var seconds = reader.ReadInt64();
+        return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
+    }
+}
+
+public class ConverterModel
+{
+    public string Name { get; set; } = string.Empty;
+
+    [NCborConverter(typeof(UnixSecondsDateTimeConverter))]
+    public DateTime Timestamp { get; set; }
+}
+
+public class ImmutablePerson
+{
+    [NCborConstructor]
+    public ImmutablePerson(string name, int age)
+    {
+        Name = name;
+        Age = age;
+    }
+
+    public string Name { get; }
+    public int Age { get; }
+}
+
+public class HybridConstructorModel
+{
+    [NCborConstructor]
+    public HybridConstructorModel(string id)
+    {
+        Id = id;
+    }
+
+    public string Id { get; }
+    public string? Note { get; set; }
+}
+
 public class IgnoreConditionModel
 {
     public string Name { get; set; } = string.Empty;
@@ -228,6 +276,9 @@ public class IgnoreConditionModel
 [NCborSerializable(typeof(ByteArrayModel))]
 [NCborSerializable(typeof(EnumModel))]
 [NCborSerializable(typeof(IgnoreConditionModel))]
+[NCborSerializable(typeof(ConverterModel))]
+[NCborSerializable(typeof(ImmutablePerson))]
+[NCborSerializable(typeof(HybridConstructorModel))]
 [NCborSerializable(typeof(List<SimpleModel>))]
 [NCborSerializable(typeof(List<string>))]
 [NCborSerializable(typeof(Dictionary<string, string>))]

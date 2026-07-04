@@ -218,7 +218,58 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("return dictionary;");
             return builder.ToString();
         }
-        var properties = GetSerializableProperties(typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties"));
+        var namedType = typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties");
+        var properties = GetSerializableProperties(namedType).ToList();
+        var constructor = GetDeserializationConstructor(namedType);
+
+        if (constructor != null)
+        {
+            // Constructor-based deserialization: read every property into a local first (get-only
+            // properties have no setter to assign into later), construct via the marked
+            // constructor, then assign any remaining settable properties it didn't cover.
+            foreach (var property in properties)
+            {
+                builder.AppendLine($"{property.Type.ToDisplayString()} __{property.Name} = default!;");
+            }
+            builder.AppendLine("reader.ReadStartMap();");
+            builder.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
+            builder.AppendLine("{");
+            builder.AppendLine("    var propertyName = reader.ReadTextString();");
+            builder.AppendLine("    switch (propertyName)");
+            builder.AppendLine("    {");
+            foreach (var property in properties)
+            {
+                var propertyName = GetPropertyName(property, namingPolicy);
+                builder.AppendLine($"        case \"{propertyName}\":");
+                builder.AppendLine($"            __{property.Name} = {GeneratePropertyDeserialization(property)};");
+                builder.AppendLine("            break;");
+            }
+            builder.AppendLine("        default:");
+            builder.AppendLine("            reader.SkipValue();");
+            builder.AppendLine("            break;");
+            builder.AppendLine("    }");
+            builder.AppendLine("}");
+            builder.AppendLine("reader.ReadEndMap();");
+
+            var ctorArgs = constructor.Parameters.Select(p =>
+            {
+                var matched = FindMatchingProperty(properties, p);
+                return matched != null ? $"__{matched.Name}" : $"default({p.Type.ToDisplayString()})!";
+            });
+            builder.AppendLine($"var result = new {typeSymbol.ToDisplayString()}({string.Join(", ", ctorArgs)});");
+
+            foreach (var property in properties)
+            {
+                if (property.SetMethod != null && FindMatchingParameter(constructor, property) == null)
+                {
+                    builder.AppendLine($"result.{property.Name} = __{property.Name};");
+                }
+            }
+
+            builder.AppendLine("return result;");
+            return builder.ToString();
+        }
+
         builder.AppendLine($"var result = new {typeSymbol.ToDisplayString()}();");
         builder.AppendLine("reader.ReadStartMap();");
         builder.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
@@ -245,10 +296,36 @@ internal static class SerializationCodeGenerator
 
     private static IEnumerable<IPropertySymbol> GetSerializableProperties(INamedTypeSymbol typeSymbol)
     {
+        var constructor = GetDeserializationConstructor(typeSymbol);
         return typeSymbol.GetMembers()
             .OfType<IPropertySymbol>()
-            .Where(p => !p.IsStatic && p.GetMethod != null && p.SetMethod != null)
+            .Where(p => !p.IsStatic && p.GetMethod != null)
+            .Where(p => p.SetMethod != null || (constructor != null && FindMatchingParameter(constructor, p) != null))
             .Where(p => !IsAlwaysIgnored(p));
+    }
+
+    /// <summary>
+    /// Returns the type's constructor marked with <c>[NCborConstructor]</c>, or null if it has none.
+    /// </summary>
+    private static IMethodSymbol? GetDeserializationConstructor(INamedTypeSymbol typeSymbol)
+    {
+        return typeSymbol.Constructors.FirstOrDefault(c =>
+            c.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "NCbor.NCborConstructorAttribute"));
+    }
+
+    /// <summary>
+    /// Matches a constructor parameter to a property by name (case-insensitive). Custom wire
+    /// names via [NCborPropertyName] on the *parameter* (rather than the property) are not
+    /// consulted here — only the C# names are compared.
+    /// </summary>
+    private static IParameterSymbol? FindMatchingParameter(IMethodSymbol constructor, IPropertySymbol property)
+    {
+        return constructor.Parameters.FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IPropertySymbol? FindMatchingProperty(IEnumerable<IPropertySymbol> properties, IParameterSymbol parameter)
+    {
+        return properties.FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
     }
 
     private static AttributeData? GetIgnoreAttribute(IPropertySymbol property)
@@ -265,6 +342,22 @@ internal static class SerializationCodeGenerator
 
         // A bare [NCborIgnore] (no Condition set) defaults to Always, same as the runtime attribute's default.
         return GetIgnoreCondition(ignoreAttr) == NCborIgnoreCondition.Always;
+    }
+
+    /// <summary>
+    /// Returns the fully-qualified type name of the property's <c>[NCborConverter(typeof(X))]</c>
+    /// converter, or null if the property has no custom converter.
+    /// </summary>
+    private static string? GetConverterType(IPropertySymbol property)
+    {
+        var converterAttr = property.GetAttributes()
+            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborConverterAttribute");
+        if (converterAttr == null || converterAttr.ConstructorArguments.Length == 0)
+            return null;
+
+        return converterAttr.ConstructorArguments[0].Value is ITypeSymbol converterTypeSymbol
+            ? converterTypeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            : null;
     }
 
     private static NCborIgnoreCondition GetIgnoreCondition(AttributeData ignoreAttr)
@@ -355,6 +448,13 @@ internal static class SerializationCodeGenerator
     {
         var type = property.Type;
 
+        // A custom converter takes priority over every other dispatch rule.
+        var converterType = GetConverterType(property);
+        if (converterType != null)
+        {
+            return $"new {converterType}().Write(writer, value.{property.Name});";
+        }
+
         // Handle byte[] / byte[]? as CBOR byte string (major type 2)
         if (IsByteArray(type))
         {
@@ -414,6 +514,13 @@ internal static class SerializationCodeGenerator
     private static string GeneratePropertyDeserialization(IPropertySymbol property)
     {
         var type = property.Type;
+
+        // A custom converter takes priority over every other dispatch rule.
+        var converterType = GetConverterType(property);
+        if (converterType != null)
+        {
+            return $"new {converterType}().Read(reader)";
+        }
 
         // Handle byte[] / byte[]? as CBOR byte string (major type 2)
         if (IsByteArray(type))

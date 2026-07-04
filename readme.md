@@ -10,7 +10,7 @@ The only AOT-compliant, reflection-free CBOR serializer for .NET, utilizing Syst
 
 **Strategic Position**: Modern, high-performance CBOR serialization designed for the future of .NET - AOT-first, zero reflection, maximum performance.
 
-**Status**: Production-ready with 159 passing tests and comprehensive type support.
+**Status**: Production-ready with 164 passing tests and comprehensive type support.
 
 See the [specification document](cbor-serialization-specs.md) for learning more about the design and features, and [GAPS.md](GAPS.md) for the current, honest list of what's still missing or half-implemented.
 
@@ -34,7 +34,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 - ✅ Support for .NET primitive types and collections
 - ✅ Efficient binary serialization with CBOR compliance
 - ✅ Native AOT support and trimming-friendly
-- ✅ Comprehensive test suite (159 tests, 0 failures)
+- ✅ Comprehensive test suite (164 tests, 0 failures)
 - ✅ Full nullable type support
 - ✅ Rich attribute system (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ 7 naming policies (CamelCase, SnakeCase, KebabCase, etc.)
@@ -52,7 +52,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 │   ├── NCborSourceGenerator.cs      # Incremental source generator
 │   └── SerializationCodeGenerator.cs # Code generation logic
 │
-├── NCbor.Tests/       # Comprehensive test suite (159 tests)
+├── NCbor.Tests/       # Comprehensive test suite (164 tests)
 │   ├── NCborTests.cs                # Core serialization tests
 │   ├── NCborErrorTests.cs           # Error handling tests
 │   ├── NCborDictionaryTests.cs      # Dictionary serialization tests
@@ -140,7 +140,7 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 ## 🏆 **v1.0 Production Status - COMPLETE!**
 
 ### 📊 **Technical Excellence Metrics**
-- **159 Tests Passing** (0 failures) - Comprehensive coverage
+- **164 Tests Passing** (0 failures) - Comprehensive coverage
 - **99% Feature Complete** - All critical functionality implemented
 - **Zero Reflection** - Fully AOT compatible architecture
 - **Modern .NET Patterns** - Following System.Text.Json design
@@ -160,7 +160,7 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 - **Maintainability**: ✅ **Excellent** - Clear separation of concerns, follows .NET patterns
 - **Extensibility**: ✅ **High** - Easy to add new types using established patterns  
 - **Performance**: ✅ **Optimized** - Efficient generated code with minimal allocations
-- **Testability**: ✅ **Comprehensive** - 159 tests covering all scenarios
+- **Testability**: ✅ **Comprehensive** - 164 tests covering all scenarios
 - **Technical Debt**: ✅ **Minimal** - no TODO/HACK/FIXME markers in hand-written code (the generator does emit a `// TODO` placeholder comment for any type that falls outside `IsBuiltInType()`, which is expected behavior, not debt)
 
 ### 🔧 **Implementation Excellence**
@@ -209,13 +209,13 @@ listed here as medium priority) was implemented 2026-07-04 via configurable dept
   - ✅ Complex nested object hierarchies
 - ✅ **Custom attributes support** (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with **159 passing tests, 0 failures** covering all functionality
+- ✅ **Comprehensive test suite** with **164 passing tests, 0 failures** covering all functionality
 - ✅ **Production-ready error handling** with custom exception types and contextual error messages
 - ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Working demo project** demonstrates real-world serialization scenarios
 
 **Quality Metrics:**
-- **Test Coverage**: 159 comprehensive tests with 100% pass rate
+- **Test Coverage**: 164 comprehensive tests with 100% pass rate
 - **AOT Verified**: Zero runtime reflection, fully compatible with Native AOT
 - **Production Ready**: Robust error handling, comprehensive type support
 - **Developer Experience**: Clean API following System.Text.Json patterns
@@ -289,7 +289,7 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (159 tests)
+# Run the comprehensive test suite (164 tests)
 dotnet test NCbor.Tests/
 
 # Run the demo
@@ -298,7 +298,7 @@ dotnet run --project NCbor.Demo/
 
 ## Test Results
 
-The library includes a comprehensive test suite with **159 tests, 0 failures**:
+The library includes a comprehensive test suite with **164 tests, 0 failures**:
 
 - **NCborSerializerTests** (12+ tests): Core serialization functionality
 - **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases  

@@ -128,9 +128,17 @@ public class NullHandlingAndContextShapeTests
             }
             """;
 
-        GeneratorHarness.Run(source).GeneratedSources.Keys
-            .Should().Equal(GeneratorHarness.Run(source).GeneratedSources.Keys);
+        var keys = GeneratorHarness.Run(source).GeneratedSources.Keys.ToList();
+        keys.Should().Equal(GeneratorHarness.Run(source).GeneratedSources.Keys);
+
+        // Pin the exact names: same-process equality alone would still pass if the hash were
+        // string.GetHashCode() (randomized per process), which would make hint names — and so
+        // generated file paths — differ between builds and machines.
+        keys.Should().Equal(PinnedCaseCollisionHintNames);
     }
+
+    // Recorded from the FNV-1a StableHash; update deliberately if the hint-name scheme changes.
+    private static readonly string[] PinnedCaseCollisionHintNames = { "N1.CTX.0F07A52F.g.cs", "N1.Ctx.EEB7C0EF.g.cs" };
 
     // ---------- CBOR007 location ----------
 

@@ -320,8 +320,8 @@ public static class NCborSerializer
         catch (ArgumentException ex)
         {
             // Everything reaching here comes from decoding the payload (the public overloads validate their
-            // own arguments before calling ReadValue), e.g. a duplicate map key hitting Dictionary.Add or an
-            // unknown enum name hitting Enum.Parse. That is bad input data, not caller misuse.
+            // own arguments before calling ReadValue), e.g. an unknown enum name hitting Enum.Parse. That is
+            // bad input data, not caller misuse.
             throw new NCborDeserializationException(typeof(T), $"Invalid data during deserialization: {ex.Message}", ex);
         }
         catch (Exception ex)

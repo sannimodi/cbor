@@ -63,15 +63,15 @@ public class NCborTrailingDataTests
 public class NCborMalformedPayloadTests
 {
     [Fact]
-    public void DuplicateMapKey_IsReportedAsNCborException_NotRawArgumentException()
+    public void DuplicateMapKey_IsRejectedByTheReader_AsNCborDeserializationException()
     {
-        // {"a": 1, "a": 2} — hand-encoded, since CborWriter refuses to produce it.
+        // {"a": 1, "a": 2} — hand-encoded, since CborWriter refuses to produce it. The Strict-mode
+        // CborReader rejects it (CborContentException) before Dictionary.Add is ever reached.
         var bytes = new byte[] { 0xA2, 0x61, 0x61, 0x01, 0x61, 0x61, 0x02 };
 
-        var ex = Record.Exception(() => NCborSerializer.Deserialize(bytes, TestNCborContext.Default.DictionaryOfStringAndInt32));
+        var act = () => NCborSerializer.Deserialize(bytes, TestNCborContext.Default.DictionaryOfStringAndInt32);
 
-        ex.Should().NotBeNull();
-        ex.Should().Match(e => e is NCborDeserializationException || e is NCborValidationException);
+        act.Should().Throw<NCborDeserializationException>().WithInnerException<System.Formats.Cbor.CborContentException>();
     }
 
     [Fact]

@@ -86,6 +86,14 @@ compile/diagnostic tests in `NCbor.Generator.Tests` (the new `CSharpGeneratorDri
 - **LIMIT-3** — a mutable `record struct R(int A = 42)` uses `new R()` + setters, so the parameter default is not applied when the key is absent.
 - **LIMIT-4** — disambiguated context-property names depend on registration/discovery order: adding a type can rename an existing *discovered* property (e.g. `Item` → `B_Item`). Register the type explicitly if you depend on its property name.
 - **LIMIT-5** — the `Stream` overloads buffer the whole payload (`CborReader`/`CborWriter` aren't streaming); `ValueTask` comes from `System.Threading.Tasks.Extensions` on netstandard2.0.
+- **WIRE-1 (intentional wire change)** — overrides now inherit NCbor attributes from the overridden
+  property (GAP-15). If a base `virtual` property carries `[NCborPropertyName("n")]` or `[NCborIgnore]`
+  and a derived class overrides it *without* repeating the attribute, older builds wrote the derived
+  type under the C# name (`"Name"`, and wrote the ignored property); new builds write `"n"` and omit it.
+  Payloads written by an older build for such types still deserialize without error, but the renamed
+  property comes back as its default value. Repeat the attribute on the override if you need the old
+  wire shape. All other wire-format differences in this pass are additive (inherited base properties
+  now present; null reference properties written as CBOR `null` instead of crashing).
 - **LIMIT-6** — `TimeSpan`, `Uri`, `DateOnly`, `TimeOnly`, `char` are diagnosed (CBOR009) but not implemented; use `[NCborConverter]` meanwhile. Pointer-typed properties still produce compiler errors on top of CBOR009.
 
 ## How to use this file

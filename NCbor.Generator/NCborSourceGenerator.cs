@@ -28,6 +28,11 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         "CBOR008", "NCbor Generator",
         "Property '{0}' on type '{1}' is marked [NCborEnumAsString] but its type is not an enum (or nullable enum) — the attribute has no effect and the property serializes normally.",
         "Usage", DiagnosticSeverity.Warning, true);
+
+    private static readonly DiagnosticDescriptor NoUsableConstructor = new DiagnosticDescriptor(
+        "CBOR010", "NCbor Generator",
+        "Type '{0}' cannot be deserialized: {1}. Add an accessible parameterless constructor, a single constructor whose parameters all match properties by name and type, or mark one constructor [NCborConstructor].",
+        "Usage", DiagnosticSeverity.Error, true);
 #pragma warning restore RS2008, RS1032
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -126,6 +131,10 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(DiagnosticInfo.Create(AmbiguousConstructors, null, registeredType.Name));
             }
+
+            // Error: no constructor the generated Deserialize can call (see SerializationCodeGenerator.ResolveConstructor).
+            foreach (var problem in SerializationCodeGenerator.GetConstructorProblems(registeredType))
+                diagnostics.Add(DiagnosticInfo.Create(NoUsableConstructor, registeredType.Locations.FirstOrDefault(), registeredType.Name, problem));
 
             // Warn about [NCborEnumAsString] applied to a non-enum property — it silently
             // has no effect today.

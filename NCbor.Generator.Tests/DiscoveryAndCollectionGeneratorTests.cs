@@ -294,6 +294,8 @@ public class DiscoveryAndCollectionGeneratorTests
         cbor009.Should().NotBeEmpty(result.ToString());
         cbor009.Should().OnlyContain(d => d.Severity == DiagnosticSeverity.Error);
         cbor009[0].GetMessage().Should().Contain("Holder.Value");
+        // An unsupported type is reported once, as CBOR009 — never also CBOR005/006/008/010.
+        result.GeneratorDiagnostics.Should().OnlyContain(d => d.Id == "CBOR009", result.ToString());
         // The stub TypeInfo keeps every reference site resolvable: CBOR009 is the only error.
         result.CompilationErrors.Should().BeEmpty(result.ToString() + "\n" + result.DumpGeneratedSources());
     }
@@ -510,6 +512,8 @@ public class DiscoveryAndCollectionGeneratorTests
         text.Should().Contain("public NCborTypeInfo<int> Int32 { get; }");
         text.Should().Contain("public NCborTypeInfo<int?> NullableOfInt32 { get; }");
         text.Should().Contain("Type t when t == typeof(int) => (NCborTypeInfo<T>)(object)Int32,");
+        // Registered Nullable<int> must not be treated as a POCO (CBOR005 on HasValue/Value).
+        result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
     }
 
     private static int CountOccurrences(string text, string value)

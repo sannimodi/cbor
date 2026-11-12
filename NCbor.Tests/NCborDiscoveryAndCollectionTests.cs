@@ -46,9 +46,23 @@ public class DiscoveryNode
     public List<DiscoveryNode> Kids { get; set; } = [];
 }
 
+public class DiscoveryBase
+{
+    public List<List<int>> InheritedGrid { get; set; } = [];
+}
+
+public class DiscoveryDerived : DiscoveryBase
+{
+    public string Label { get; set; } = string.Empty;
+}
+
+public record DiscoveryPositionalRecord(string Name, IReadOnlyList<int> Items);
+
 [NCborSerializable(typeof(DiscoveryRoot))]
 [NCborSerializable(typeof(InterfaceCollectionsModel))]
 [NCborSerializable(typeof(DiscoveryNode))]
+[NCborSerializable(typeof(DiscoveryDerived))]
+[NCborSerializable(typeof(DiscoveryPositionalRecord))]
 [NCborSerializable(typeof(int))]
 [NCborSerializable(typeof(string))]
 [NCborSerializable(typeof(int?))]
@@ -119,6 +133,33 @@ public class NCborDiscoveryAndCollectionTests
 
         result.Should().BeEquivalentTo(original);
         result.Next!.Next!.Next.Should().BeNull();
+    }
+
+    [Fact]
+    public void Derived_WhoseBaseHasUnregisteredNestedList_RoundTrips()
+    {
+        // List<List<int>> is declared on the base class only and never registered: discovery
+        // reaches it through the inheritance-aware GetSerializableProperties.
+        var original = new DiscoveryDerived { Label = "derived", InheritedGrid = [[1, 2], [3]] };
+
+        var bytes = NCborSerializer.Serialize(original, _context.DiscoveryDerived);
+        var result = NCborSerializer.Deserialize(bytes, _context.DiscoveryDerived);
+
+        result.Label.Should().Be("derived");
+        result.InheritedGrid.Should().BeEquivalentTo(original.InheritedGrid);
+    }
+
+    [Fact]
+    public void PositionalRecord_WithIReadOnlyListParameter_RoundTrips()
+    {
+        var original = new DiscoveryPositionalRecord("rec", new List<int> { 4, 5, 6 });
+
+        var bytes = NCborSerializer.Serialize(original, _context.DiscoveryPositionalRecord);
+        var result = NCborSerializer.Deserialize(bytes, _context.DiscoveryPositionalRecord);
+
+        result.Name.Should().Be("rec");
+        result.Items.Should().Equal(4, 5, 6);
+        result.Items.Should().BeOfType<List<int>>();
     }
 
     // ---------- Nullable elements ----------

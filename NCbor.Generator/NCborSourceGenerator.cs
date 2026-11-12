@@ -38,6 +38,11 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         "CBOR011", "NCbor Generator",
         "Type '{0}' (reached from {1}) would generate context property '{2}', which is already taken by {3}. Rename one of the types, or nest them so their simple names differ.",
         "Usage", DiagnosticSeverity.Error, true);
+
+    private static readonly DiagnosticDescriptor NoUsableConstructor = new DiagnosticDescriptor(
+        "CBOR010", "NCbor Generator",
+        "Type '{0}' cannot be deserialized: {1}. Add an accessible parameterless constructor, a single constructor whose parameters all match properties by name and type, or mark one constructor [NCborConstructor].",
+        "Usage", DiagnosticSeverity.Error, true);
 #pragma warning restore RS2008, RS1032
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -125,7 +130,10 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
 
         // Warn about get-only properties that will be silently dropped from serialization
         // (no setter, and not covered by a [NCborConstructor] parameter if one exists).
-        foreach (var registeredType in closure.Types.OfType<INamedTypeSymbol>())
+        // Only plain objects: collections, arrays, built-ins and registered Nullable<built-in>
+        // (whose HasValue/Value would otherwise trip CBOR005) have no properties to check, and
+        // CBOR009 types are never in closure.Types, so they get no CBOR005/006/007/008/010 on top.
+        foreach (var registeredType in closure.Types.OfType<INamedTypeSymbol>().Where(t => SerializationCodeGenerator.ClassifyType(t, out _) == TypeShape.PlainObject))
         {
             foreach (var uncovered in SerializationCodeGenerator.GetUncoveredGetOnlyProperties(registeredType, contextDefaultIgnoreCondition))
             {
@@ -146,6 +154,10 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             {
                 diagnostics.Add(DiagnosticInfo.Create(AmbiguousConstructors, null, registeredType.Name));
             }
+
+            // Error: no constructor the generated Deserialize can call (see SerializationCodeGenerator.ResolveConstructor).
+            foreach (var problem in SerializationCodeGenerator.GetConstructorProblems(registeredType))
+                diagnostics.Add(DiagnosticInfo.Create(NoUsableConstructor, registeredType.Locations.FirstOrDefault(), registeredType.Name, problem));
 
             // Warn about [NCborEnumAsString] applied to a non-enum property — it silently
             // has no effect today.

@@ -7,7 +7,7 @@ namespace NCbor.Generator.Tests;
 /// </summary>
 public class KnownBugTests
 {
-    [Fact(Skip = "Known bug: the generator only walks typeSymbol.GetMembers(), so properties declared on a base class are silently omitted (no BaseMarkerValue key in generated code).")]
+    [Fact]
     public void Inheritance_BaseClassPropertiesAreSerialized()
     {
         var result = GeneratorHarness.AssertCompilesCleanly("""
@@ -35,7 +35,7 @@ public class KnownBugTests
             "properties declared on a base class must be part of the derived type's CBOR map");
     }
 
-    [Fact(Skip = "Known bug: positional records are treated as settable POCOs; generated code calls a missing parameterless constructor (CS7036) and assigns init-only properties after construction (CS8852).")]
+    [Fact]
     public void PositionalRecord_CompilesCleanly()
     {
         GeneratorHarness.AssertCompilesCleanly("""
@@ -51,7 +51,7 @@ public class KnownBugTests
             """);
     }
 
-    [Fact(Skip = "Known bug: { get; init; } properties are treated as settable; generated code assigns them after construction (CS8852).")]
+    [Fact]
     public void InitOnlyProperty_CompilesCleanly()
     {
         GeneratorHarness.AssertCompilesCleanly("""
@@ -116,7 +116,7 @@ public class KnownBugTests
             """);
     }
 
-    [Fact(Skip = "Known bug: CBOR005 fires for the compiler-synthesized EqualityContract property of every record.")]
+    [Fact]
     public void Record_DoesNotGetCBOR005ForEqualityContract()
     {
         var result = GeneratorHarness.Run("""

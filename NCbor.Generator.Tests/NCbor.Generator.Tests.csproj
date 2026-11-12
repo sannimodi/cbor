@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!-- Generator-level tests: drive NCborSourceGenerator through CSharpGeneratorDriver against
+	     in-memory source strings, so we can assert on generator diagnostics (CBOR005-CBOR008) and
+	     on whether the generated code compiles. NCbor.Tests consumes the generator as an analyzer
+	     at build time and so cannot observe either of those. -->
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="coverlet.collector" Version="6.0.4" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+		<PackageReference Include="xunit" Version="2.9.3" />
+		<PackageReference Include="xunit.runner.visualstudio" Version="3.1.1">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="FluentAssertions" Version="8.3.0" />
+		<PackageReference Include="System.Formats.Cbor" Version="10.0.0-preview.5.25277.114" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+		<PackageReference Include="Basic.Reference.Assemblies.Net100" Version="1.8.15" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\NCbor\NCbor.csproj" />
+		<!-- Referenced as a normal assembly (not OutputItemType=Analyzer) so tests can instantiate
+		     NCborSourceGenerator and hand it to a CSharpGeneratorDriver directly. -->
+		<ProjectReference Include="..\NCbor.Generator\NCbor.Generator.csproj" ReferenceOutputAssembly="true" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Using Include="Xunit" />
+		<Using Include="FluentAssertions" />
+	</ItemGroup>
+
+</Project>

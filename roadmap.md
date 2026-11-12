@@ -1,6 +1,6 @@
 # NCbor Serialization Library - Strategic Roadmap
 
-*Last Updated: 2026-07-04*  
+*Last Updated: 2026-11-13*  
 *Current Status: **v1.0 PRODUCTION READY - STRATEGIC POSITIONING COMPLETE!** 🎯*
 
 > For the flat, no-marketing-language checklist of what's actually done vs. stubbed vs.
@@ -36,16 +36,20 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **CBOR Integration**: Proper use of System.Formats.Cbor for underlying CBOR operations
 - ✅ **Build System**: Fixed circular dependencies and project references (December 2025)
 
-#### Type Support (100% Complete) ✅
+#### Type Support ✅ (corrected 2026-11-13)
+> This section previously said "100% Complete" while inheritance, records, `init` members,
+> interface collections and unregistered nested types silently lost data or failed to compile.
+> Those are fixed as of 2026-11-13 — see [GAPS.md](GAPS.md) GAP-15–25 and the known limits LIMIT-1–6.
 - ✅ **Primitives**: string, int, bool, double, float, byte, sbyte, short, ushort, uint, ulong, long
 - ✅ **DateTime/DateTimeOffset**: CBOR Tag 0 (RFC 3339/ISO 8601). `DateTimeOffset` preserves its offset; `DateTime` normalizes to UTC on write (Kind is not preserved — intentional, see [GAPS.md](GAPS.md) GAP-9)
 - ✅ **Guid**: 16-byte binary format serialization with System.Guid support
-- ✅ **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
+- ✅ **Collections**: `List<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `IEnumerable<T>`, `HashSet<T>`/`ISet<T>`/`IReadOnlySet<T>`, `Dictionary<K,V>`/`IDictionary<K,V>`/`IReadOnlyDictionary<K,V>` — nested types are discovered automatically, no manual registration (2026-11-13)
 - ✅ **Dictionary<K,V>**: Complete key-value collection support with nullable variants
 - ✅ **Decimal**: System.Decimal with CBOR Tag 4 (RFC 8949 decimal fractions), full 128-bit precision
 - ✅ **Arrays (T[])**: Standard array support with string[], int[], SimpleModel[], nullable arrays (T[]?) ⭐ **COMPLETED**
 - ✅ **Enums**: Complete enum support with all backing types, nullable enums, and Flags enums ⭐ **NEWLY COMPLETED**
-- ✅ **Custom Classes**: Full support for user-defined classes and structs
+- ✅ **Custom Classes**: user-defined classes and structs, including inherited properties, `init`/`required` members, positional records and `readonly record struct`s (constructor auto-selected) — 2026-11-13
+- ⚠️ **Not supported (diagnosed with CBOR009)**: `TimeSpan`, `Uri`, `DateOnly`, `TimeOnly`, `char`, `object`, tuples, multi-dimensional arrays — use `[NCborConverter]`
 - ✅ **Nullable Types**: int?, bool?, decimal?, DateTime?, Guid?, Dictionary?, T[]?, Enum?, etc. with auto-generated helper methods
 - ✅ **Nested Objects**: Complex type hierarchies and object graphs
 - ✅ **byte[]**: Native CBOR byte string encoding (major type 2) with nullable support ⭐ **COMPLETED**
@@ -72,7 +76,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **177 tests, 0 failures** (updated with Array, Enum, and circular-reference tests)
+- ✅ **Comprehensive Test Suite**: **454 tests, 0 failures** (313 runtime tests in `NCbor.Tests` + 141 generator tests in `NCbor.Generator.Tests`, a `CSharpGeneratorDriver` harness covering every diagnostic and compile-cleanly checks per model shape)
   - ✅ **NCborSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **NCborExceptionTests** (23+ tests): Custom exception types and integration
@@ -472,7 +476,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Type Support**: ✅ **100%** (All critical types complete - DateTime, GUID, primitives, collections, Dictionary, Arrays, Enums)
 - **Attribute System**: ✅ **100%** (all 7 attribute mechanisms implemented, including the context-wide `DefaultIgnoreCondition` default and the `CBOR005` diagnostic for uncovered get-only properties)
 - **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
-- **Testing**: ✅ **100%** (177 tests covering all implemented features)
+- **Testing**: ✅ **100%** (454 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
@@ -597,7 +601,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **AOT Compatibility**: Zero runtime reflection, fully compatible with Native AOT compilation
 - ✅ **API Design**: Clean, familiar API following System.Text.Json patterns exactly
 - ✅ **Build System**: Resolved complex circular dependency issues with proper project references
-- ✅ **Quality Assurance**: 177 comprehensive tests with 100% pass rate
+- ✅ **Quality Assurance**: 454 comprehensive tests with 100% pass rate
 
 ### Production Readiness Indicators ✅
 - ✅ **Functional Demo**: Working serialization of complex object graphs and collections
@@ -645,7 +649,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### **🎯 Success Metrics & KPIs**
 
 **Technical Excellence**:
-- ✅ 177 tests passing (achieved)
+- ✅ 454 tests passing (achieved)
 - ✅ Zero reflection architecture (achieved)
 - 🎯 <5% performance overhead vs hand-written code (target)
 
@@ -693,7 +697,7 @@ Based on comprehensive multi-model analysis, the NCbor Serialization Library has
 
 **🎯 Perfect Market Niche**: Occupying the "System.Text.Json for CBOR" position with clear competitive advantages
 
-**⚡ Technical Excellence**: 99% feature complete with 177 passing tests, zero reflection architecture
+**⚡ Technical Excellence**: 99% feature complete with 454 passing tests, zero reflection architecture
 
 **🚀 Future-Aligned**: Source generation approach follows Microsoft's AOT evolution direction
 

@@ -5,10 +5,12 @@ cbor-serialization-specs.md, and release.md against the actual source (`NCbor/`,
 `NCbor.Generator/`). Fix items one by one, check them off, and keep this file current —
 it is the single source of truth for "is X actually done," not the prose docs.
 
-Last audited: 2026-07-04. All 14 tracked gaps have a resolution as of 2026-07-04: 11 fully done
+Last audited: 2026-11-13. GAP-1–14 all have a resolution as of 2026-07-04: 11 fully done
 (GAP-1, 2, 4, 5, 6, 7, 8, 10, 11, 13, 14), GAP-9 resolved by decision (documented, not
 implemented), GAP-3 resolved by decision (claims softened, benchmark suite itself still not
 built), and GAP-12 packaging prepped but not published (needs credentials/action, not code).
+GAP-15–25 (model-fidelity pass, 2026-11-13 — see the section below) are done; the known limits
+that pass deliberately left open are listed at the end of that section as LIMIT-1–6.
 Nothing is silently unaddressed — every row states its actual current status.
 
 ## Code review pass (2026-07-05)
@@ -50,10 +52,41 @@ automatically would need a `CSharpGeneratorDriver` test harness this repo didn't
 **Update:** that harness now exists — `NCbor.Generator.Tests/GeneratorHarness.cs` — and
 `NCbor.Generator.Tests/GeneratorDiagnosticTests.cs` covers `CBOR005`–`CBOR008` (positive and
 negative cases, including the `List<T>`/`Dictionary<K,V>` `CBOR005` false-positive regression).
-`NCbor.Generator.Tests/KnownBugTests.cs` holds skipped tests for generator bugs found while
+`NCbor.Generator.Tests/KnownBugTests.cs` started as skipped tests for generator bugs found while
 building it (base-class properties dropped, positional records / `init` properties /
 `IReadOnlyList<T>` / unregistered nested `List<List<T>>` failing to compile, `CBOR005` firing on
-records' `EqualityContract`).
+records' `EqualityContract`); all of them are fixed and un-skipped as of 2026-11-13 (GAP-15–18).
+
+## Model-fidelity pass (2026-11-13)
+
+A probe of ordinary C# model shapes against the generator found that `roadmap.md`'s "Type Support
+(100% Complete)" claim did not hold: several everyday shapes silently lost data or produced
+generated code that failed to compile with errors pointing into `*.g.cs`. All rows below are
+fixed on branch `feat/model-fidelity`, each with runtime round-trip tests in `NCbor.Tests` and
+compile/diagnostic tests in `NCbor.Generator.Tests` (the new `CSharpGeneratorDriver` harness).
+
+| ID | Area | Was | Now | Status |
+|----|------|-----|-----|--------|
+| GAP-15 | Inheritance | **Silent data loss**: only the declared type's own properties were serialized (`GetMembers()`), so `Derived : Base` dropped every `Base` property with no diagnostic. | Base chain walked base-first; overrides / `new`-hidden members deduped (most-derived wins, base slot kept); overrides inherit NCbor attributes from the overridden property unless they redeclare them. The walk stops at framework (`System.*`/`Microsoft.*` metadata) bases, so `Exception`/`Component`/`Attribute` subclasses serialize only their own members. See `SerializationCodeGenerator.Objects.cs` (`GetAllInstanceProperties`). | **Done** |
+| GAP-16 | `init` / `required` members | `{ get; init; }` produced CS8852 in generated code; `required` members didn't compile. | Constructed via object initializer; a missing key for a `required` member throws `NCborDeserializationException`; `[SetsRequiredMembers]` constructors are respected. A `required` *field* (never serialized — NCbor serializes properties only) reports warning **CBOR014**. | **Done** |
+| GAP-17 | Records / constructor-only types | Positional `record R(int A, string B)` failed (CS7036 + CS8852); records got a false CBOR005 for `EqualityContract`. | Constructor auto-selected without `[NCborConstructor]`: parameterless if available, else the single constructor whose parameters all match properties (exact case first, then unique case-insensitive), preferring the primary constructor; explicit parameter defaults apply when a key is absent. No usable constructor → error **CBOR010**. Structs keep `new T()` + setters unless a property is get-only/init-only. | **Done** |
+| GAP-18 | Nested-type registration | Every nested type (`List<int>`, `List<List<int>>`, `Dictionary<int,string>`, nested POCOs) had to be registered by hand with `[NCborSerializable(typeof(...))]`, otherwise CS1061 in generated code. Undocumented. | Transitive closure of registered types is discovered automatically (as in System.Text.Json): registered types first, then discovered types in BFS order; context properties are `public`/`internal`/`private` to match the type's effective accessibility. Registering a primitive (`typeof(int)`) also works now (was CS0119). | **Done** |
+| GAP-19 | Interface collections and sets | Only exact `List<T>`, `Dictionary<K,V>` and `T[]` worked; `IReadOnlyList<T>` etc. failed with CS1061/CS0144; `HashSet<T>` was treated as a plain object. | `IList`/`ICollection`/`IReadOnlyList`/`IReadOnlyCollection`/`IEnumerable<T>` → `List<T>`; `HashSet`/`ISet`/`IReadOnlySet` → `HashSet<T>`; `IDictionary`/`IReadOnlyDictionary` → `Dictionary<K,V>`. `IEnumerable<T>` writes an indefinite-length array. Jagged arrays (`int[][]`) now compile (was CS1586). `List<int?>` fixed (was CS1061). | **Done** |
+| GAP-20 | Unsupported types | Unsupported property types (`TimeSpan`, `Uri`, `object`, …) failed with CS1061 deep in generated code. | Error **CBOR009** naming the type and the property that uses it, with a throwing stub so no cascading compiler errors. Covers `TimeSpan`, `Uri`, `DateOnly`, `TimeOnly`, `char`, `object`, `dynamic`, delegates, tuples, multi-dim arrays, abstract/interface types outside the collection table, framework collections outside the table (`Queue`, `Stack`, …), `Nullable<struct POCO>`, open generics. `[NCborConverter]`/`[NCborIgnore]` properties are exempt. A *user* type that implements `IEnumerable` but isn't in the table is serialized as an object with warning **CBOR013**. | **Done** (implementing `TimeSpan`/`Uri` themselves is still open — LIMIT-6) |
+| GAP-21 | Context-property name collisions | Two types with the same simple name (e.g. `A.Item`, `B.Item`) → CS0102. | Names auto-disambiguated per context (first claimant keeps the simple name; later ones are prefixed with the nearest namespace/containing-type segment, e.g. `B_Item`), threaded through every emission site. `CBOR011` was briefly introduced for this and is **retired** (ID not reused). | **Done** |
+| GAP-22 | Null reference-type properties | **Crash**: a null `string?` threw a raw `ArgumentNullException`; a null `T[]?` threw a wrapped `NullReferenceException`. 12 CS8604 warnings in generated code. | Any reference-type property writes CBOR `null` when null and reads it back as null, regardless of annotation (System.Text.Json behavior). `WhenWritingNull` still omits the key. Generated code builds with 0 warnings. | **Done** |
+| GAP-23 | Generator pipeline cost | `CompilationProvider` combined with every partial class → whole generator re-ran on every edit; one CBOR004 Info diagnostic per *line* of generated source (5,598 in a detailed build log), plus CBOR001/003. | `ForAttributeWithMetadataName`; all symbol work in the transform producing an equatable model, so unrelated edits leave output cached (tested via step tracking). CBOR001–004 removed (IDs not reused). Hint names are `Namespace.Context.g.cs`, with a stable hash suffix when sanitising is lossy or names collide case-insensitively. Nested contexts (inside `partial` types — else error **CBOR012**), generic contexts, and `internal`/`private` contexts now generate correctly. | **Done** |
+| GAP-24 | Serializer API surface | `byte[]` only; trailing bytes after the top-level value were silently ignored. | `Stream` (sync + `SerializeAsync`/`DeserializeAsync` returning `ValueTask<T>`), `IBufferWriter<byte>`, `ReadOnlyMemory<byte>` overloads (buffered, not streaming — roadmap 2.5.3). Trailing data → `NCborValidationException`. Payload-caused `ArgumentException`s (duplicate map keys, unknown enum names) → `NCborDeserializationException`. | **Done** |
+| GAP-25 | Generator test harness | Generator diagnostics were only verified by manual builds. | `NCbor.Generator.Tests` (`GeneratorHarness.Run`/`AssertCompilesCleanly`) covers every diagnostic CBOR005–014, compile-cleanly checks per model shape, incremental caching, and diagnostic locations; CI runs `dotnet test NCbor.sln`. | **Done** |
+
+**Known limits deliberately left open (not silently missing):**
+
+- **LIMIT-1** — an `init`-only property loses its field initializer when the payload omits its key (it can't be conditionally assigned in an object initializer). Use `[NCborDefaultValue]` or a settable property if that matters.
+- **LIMIT-2** — `init`-only `required` members on a `[SetsRequiredMembers]` constructor are still assigned from the payload, so an absent key overwrites the constructor's value with `default`.
+- **LIMIT-3** — a mutable `record struct R(int A = 42)` uses `new R()` + setters, so the parameter default is not applied when the key is absent.
+- **LIMIT-4** — disambiguated context-property names depend on registration/discovery order: adding a type can rename an existing *discovered* property (e.g. `Item` → `B_Item`). Register the type explicitly if you depend on its property name.
+- **LIMIT-5** — the `Stream` overloads buffer the whole payload (`CborReader`/`CborWriter` aren't streaming); `ValueTask` comes from `System.Threading.Tasks.Extensions` on netstandard2.0.
+- **LIMIT-6** — `TimeSpan`, `Uri`, `DateOnly`, `TimeOnly`, `char` are diagnosed (CBOR009) but not implemented; use `[NCborConverter]` meanwhile. Pointer-typed properties still produce compiler errors on top of CBOR009.
 
 ## How to use this file
 
@@ -120,4 +153,4 @@ dependencies) for several of the above (circular reference protection, custom co
 constructor deserialization, attribute completion, CI/CD, benchmarking, NuGet publishing).
 This file is the flat, no-marketing-language version of the same backlog — treat `roadmap.md`
 as the narrative/strategic view and this file as the "is it actually done yet" checklist.
-Known low-priority unsupported types not broken out above: `TimeSpan`, `Uri`.
+Known low-priority unsupported types not broken out above: `TimeSpan`, `Uri` (now diagnosed with CBOR009 — see LIMIT-6).

@@ -259,15 +259,16 @@ Utilize System.Formats.Cbor classes:
 
 ### 7.1 Supported Types
 - Primitives (int, string, bool, etc.)
-- Collections (List<T>, Dictionary<K,V>, arrays)
-- Custom classes and structs
+- Collections (List<T>, Dictionary<K,V>, arrays, jagged arrays, plus IList/ICollection/IReadOnlyList/IReadOnlyCollection/IEnumerable/HashSet/ISet/IReadOnlySet/IDictionary/IReadOnlyDictionary — implemented 2026-11-13, see [GAPS.md](GAPS.md) GAP-19)
+- Custom classes and structs, including inherited properties, `init`/`required` members and positional records (GAP-15–17)
 - Nullable types
 - Enums (serialized as numbers by default, with option to serialize as strings)
 - DateTime/DateTimeOffset (ISO 8601 format)
 - Guid
 - Decimal (preserve full precision)
 - Nested generic types (e.g., List<Dictionary<string, T>>)
-- Large binary data (byte arrays; chunking is planned, not yet implemented — see [GAPS.md](GAPS.md) GAP-10)
+- Large binary data (byte arrays; chunked indefinite-length encoding above 4096 bytes — see [GAPS.md](GAPS.md) GAP-10)
+- Not supported (compile-time error CBOR009): TimeSpan, Uri, DateOnly, TimeOnly, char, object, tuples, multi-dimensional arrays (GAP-20 / LIMIT-6)
 
 ### 7.2 Type Serialization Details
 

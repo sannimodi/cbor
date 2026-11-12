@@ -10,7 +10,7 @@ The only AOT-compliant, reflection-free CBOR serializer for .NET, utilizing Syst
 
 **Strategic Position**: Modern, high-performance CBOR serialization designed for the future of .NET - AOT-first, zero reflection, maximum performance.
 
-**Status**: Production-ready with 177 passing tests and comprehensive type support.
+**Status**: 454 passing tests (313 runtime + 141 generator). Ordinary C# models — inheritance, records, `init`/`required` members, interface collections, nested types — work without manual registration; see [GAPS.md](GAPS.md) for the honest checklist and known limits.
 
 See the [specification document](cbor-serialization-specs.md) for learning more about the design and features, and [GAPS.md](GAPS.md) for the current, honest list of what's still missing or half-implemented.
 
@@ -34,8 +34,11 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 - ✅ Support for .NET primitive types and collections
 - ✅ Efficient binary serialization with CBOR compliance
 - ✅ Native AOT support and trimming-friendly
-- ✅ Comprehensive test suite (177 tests, 0 failures)
-- ✅ Full nullable type support
+- ✅ Comprehensive test suite (454 tests, 0 failures)
+- ✅ Full nullable type support (null reference-type properties round-trip as CBOR `null`)
+- ✅ Inheritance, positional records, `init`/`required` members, constructor auto-selection
+- ✅ Automatic discovery of nested types — register only your root types
+- ✅ Compile-time diagnostics (CBOR005–CBOR014) instead of broken generated code
 - ✅ Rich attribute system (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ 7 naming policies (CamelCase, SnakeCase, KebabCase, etc.)
 
@@ -49,10 +52,13 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 │   └── NCbor*Attribute.cs           # Serialization attributes
 │
 ├── NCbor.Generator/    # Source generator project
-│   ├── NCborSourceGenerator.cs      # Incremental source generator
-│   └── SerializationCodeGenerator.cs # Code generation logic
+│   ├── NCborSourceGenerator.cs                  # Incremental pipeline (ForAttributeWithMetadataName), context emission, diagnostics
+│   ├── SerializationCodeGenerator.cs            # Built-in types, property read/write
+│   ├── SerializationCodeGenerator.Objects.cs    # Inheritance, constructors, init/required/records
+│   ├── SerializationCodeGenerator.Collections.cs # Collection classification + element read/write
+│   └── SerializationCodeGenerator.Discovery.cs  # Transitive type discovery, naming, CBOR009
 │
-├── NCbor.Tests/       # Comprehensive test suite (177 tests)
+├── NCbor.Tests/       # Runtime round-trip tests (313 tests)
 │   ├── NCborTests.cs                # Core serialization tests
 │   ├── NCborErrorTests.cs           # Error handling tests
 │   ├── NCborDictionaryTests.cs      # Dictionary serialization tests
@@ -60,6 +66,10 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 │   ├── NCborAttributeTests.cs       # Attribute functionality tests
 │   ├── SourceGeneratorTests.cs     # Generator validation tests
 │   └── TestModels.cs               # Test model definitions
+│
+├── NCbor.Generator.Tests/  # Generator tests via CSharpGeneratorDriver (141 tests)
+│   ├── GeneratorHarness.cs          # Run(source) / AssertCompilesCleanly(source)
+│   └── *Tests.cs                    # Diagnostics, compile-cleanly checks, incremental caching
 │
 ├── NCbor.Demo/        # Working demo project
 │   ├── Program.cs                  # Demonstrates serialization
@@ -125,6 +135,15 @@ byte[] cborData = NCborSerializer.Serialize(person, MyContext.Default.Person);
 Person? person = NCborSerializer.Deserialize<Person>(cborData, MyContext.Default.Person);
 ```
 
+Only root types need `[NCborSerializable(typeof(...))]` on the context — `List<Address>`,
+`Dictionary<string, Order>`, nested POCOs and base-class properties are discovered automatically.
+
+Other overloads mirror System.Text.Json: `Serialize(Stream, …)`, `SerializeAsync(Stream, …)`,
+`Serialize(IBufferWriter<byte>, …)`, `Deserialize(ReadOnlyMemory<byte>, …)`, `Deserialize(Stream, …)`,
+`DeserializeAsync(Stream, …)` (returns `ValueTask<T>`). The stream overloads buffer the whole
+payload; a payload must contain exactly one top-level CBOR value (trailing bytes throw
+`NCborValidationException`).
+
 ### Property Naming Policies
 
 The `NCborSourceGenerationOptions` attribute supports several naming conventions:
@@ -140,7 +159,7 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 ## 🏆 **v1.0 Production Status - COMPLETE!**
 
 ### 📊 **Technical Excellence Metrics**
-- **177 Tests Passing** (0 failures) - Comprehensive coverage
+- **454 Tests Passing** (0 failures) - Comprehensive coverage
 - **99% Feature Complete** - All critical functionality implemented
 - **Zero Reflection** - Fully AOT compatible architecture
 - **Modern .NET Patterns** - Following System.Text.Json design
@@ -160,8 +179,8 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 - **Maintainability**: ✅ **Excellent** - Clear separation of concerns, follows .NET patterns
 - **Extensibility**: ✅ **High** - Easy to add new types using established patterns  
 - **Performance**: ✅ **Optimized** - Efficient generated code with minimal allocations
-- **Testability**: ✅ **Comprehensive** - 177 tests covering all scenarios
-- **Technical Debt**: ✅ **Minimal** - no TODO/HACK/FIXME markers in hand-written code (the generator does emit a `// TODO` placeholder comment for any type that falls outside `IsBuiltInType()`, which is expected behavior, not debt)
+- **Testability**: ✅ **Comprehensive** - 454 tests, including a `CSharpGeneratorDriver` harness for the generator itself
+- **Technical Debt**: ✅ **Minimal** - no TODO/HACK/FIXME markers in hand-written code (`SerializationCodeGenerator.cs` still has a `// TODO` fallback string for types outside `IsBuiltInType()`; unsupported types are now caught earlier by CBOR009, so it should be unreachable)
 
 ### 🔧 **Implementation Excellence**
 - **Source Generation Strategy**: Uses incremental source generators effectively, following .NET 5+ best practices
@@ -203,22 +222,22 @@ optimization, and byte[] chunked encoding (previously listed here) were all impl
   - ✅ System.Decimal with CBOR Tag 4 (RFC 8949, full 128-bit precision)
   - ✅ DateTime/DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601)
   - ✅ System.Guid with 16-byte binary format
-  - ✅ Collections (List<T>, Dictionary<K,V>) with nested support
+  - ✅ Collections (List/IList/IReadOnlyList/IEnumerable/HashSet/ISet/Dictionary/IDictionary/IReadOnlyDictionary) with automatic nested-type discovery
   - ✅ Arrays (T[]) with nullable support
   - ✅ byte[] with native CBOR byte string encoding (major type 2)
   - ✅ Enums with all backing types, nullable enums, Flags support
-  - ✅ Custom classes and structs
+  - ✅ Custom classes and structs, inheritance, positional records, `init`/`required` members
   - ✅ Nullable types (T?, Dictionary<K,V>?, T[]?, Enum?) with auto-generated helpers
   - ✅ Complex nested object hierarchies
 - ✅ **Custom attributes support** (NCborPropertyName, NCborIgnore, NCborDefaultValue)
 - ✅ **AOT compatibility** achieved by avoiding runtime reflection
-- ✅ **Comprehensive test suite** with **177 passing tests, 0 failures** covering all functionality
+- ✅ **Comprehensive test suite** with **454 passing tests, 0 failures** covering all functionality
 - ✅ **Production-ready error handling** with custom exception types and contextual error messages
 - ✅ **Complete naming policy support** for all 7 naming conventions (CamelCase, SnakeCase, KebabCase, etc.)
 - ✅ **Working demo project** demonstrates real-world serialization scenarios
 
 **Quality Metrics:**
-- **Test Coverage**: 177 comprehensive tests with 100% pass rate
+- **Test Coverage**: 454 comprehensive tests with 100% pass rate
 - **AOT Verified**: Zero runtime reflection, fully compatible with Native AOT
 - **Production Ready**: Robust error handling, comprehensive type support
 - **Developer Experience**: Clean API following System.Text.Json patterns
@@ -238,14 +257,38 @@ The library is designed to work with Native AOT. To use it in an AOT project:
 - **Decimal**: System.Decimal with CBOR Tag 4 (RFC 8949 decimal fractions), full 128-bit precision
 - **DateTime Types**: DateTime, DateTimeOffset with CBOR Tag 0 (RFC 3339/ISO 8601). `DateTimeOffset` preserves its offset; `DateTime` is normalized to UTC on write, so `DateTimeKind` (Local/Unspecified) is not recoverable after round-trip — see [GAPS.md](GAPS.md) GAP-9 for why this is intentional, not a bug
 - **GUID**: System.Guid with efficient 16-byte binary format
-- **Collections**: List<T>, Dictionary<K,V> with optimized built-in type handling
-- **Arrays**: T[] (string[], int[], SimpleModel[]) with efficient serialization and nullable array support
+- **Collections**: `List<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, `IReadOnlyCollection<T>`, `IEnumerable<T>` (deserialized as `List<T>`); `HashSet<T>`, `ISet<T>`, `IReadOnlySet<T>` (as `HashSet<T>`); `Dictionary<K,V>`, `IDictionary<K,V>`, `IReadOnlyDictionary<K,V>` (as `Dictionary<K,V>`)
+- **Arrays**: T[] (string[], int[], SimpleModel[]), jagged arrays (`int[][]`), nullable arrays
 - **byte[]**: Native CBOR byte string encoding (major type 2) for compact binary data
 - **Enums**: Complete enum support with all backing types (int, byte, sbyte, etc.), nullable enums, and Flags enums
-- **Custom classes and structs** with source generation
-- **Nullable types** (int?, bool?, decimal?, DateTime?, Guid?, etc.) with auto-generated helper methods
+- **Custom classes and structs** with source generation, including **inherited properties** (framework base classes such as `Exception` are not walked), **`init`/`required` members**, **positional records** and **`readonly record struct`s** — the constructor is auto-selected (or mark one `[NCborConstructor]`)
+- **Automatic type discovery**: register only root types; every type reachable through properties, elements, keys and values gets its own `NCborTypeInfo` on the context
+- **Nullable types** (int?, bool?, decimal?, DateTime?, Guid?, etc.), and null reference-type properties (written as CBOR `null`, whatever their annotation)
 - **Nested objects** and complex type hierarchies
 - **Custom attributes**: NCborPropertyName, NCborIgnore, NCborDefaultValue, NCborConverter, NCborConstructor, NCborEnumAsString
+
+### Not Supported (reported at compile time) ⚠️
+`TimeSpan`, `Uri`, `DateOnly`, `TimeOnly`, `char`, `object`/`dynamic`, delegates, tuples,
+multi-dimensional arrays, abstract classes/interfaces outside the collection list, framework
+collections outside the list (`Queue<T>`, `Stack<T>`, …) and open generic types produce error
+**CBOR009** naming the type and the property that uses it. Put `[NCborConverter]` or
+`[NCborIgnore]` on the property to opt out. See [GAPS.md](GAPS.md) LIMIT-1–6 for the other known limits.
+
+### Generator Diagnostics
+| ID | Severity | Meaning |
+|----|----------|---------|
+| CBOR005 | Warning | Get-only property not covered by a constructor parameter — excluded from serialization |
+| CBOR006 | Warning | Constructor parameter has no matching property |
+| CBOR007 | Error | More than one `[NCborConstructor]` |
+| CBOR008 | Warning | `[NCborEnumAsString]` on a non-enum property |
+| CBOR009 | Error | Unsupported type (see above) |
+| CBOR010 | Error | No usable constructor for deserialization |
+| CBOR012 | Error | Context nested in a non-`partial` type |
+| CBOR013 | Warning | User type implements `IEnumerable` but isn't a supported collection — serialized as an object |
+| CBOR014 | Warning | `required` field (fields are not serialized) |
+
+CBOR001–004 (debug noise) and CBOR011 (name collisions — now auto-disambiguated) were removed;
+their IDs are not reused.
 
 ### 🚀 **Performance & Benchmarking** (Coming in v1.1)
 **Next Priority**: Comprehensive benchmarking suite showing performance advantages:
@@ -289,8 +332,8 @@ git clone https://github.com/yourusername/cbor.git
 # Build the solution (.NET 10 required)
 dotnet build
 
-# Run the comprehensive test suite (177 tests)
-dotnet test NCbor.Tests/
+# Run both test projects (454 tests)
+dotnet test NCbor.sln
 
 # Run the demo
 dotnet run --project NCbor.Demo/
@@ -298,7 +341,7 @@ dotnet run --project NCbor.Demo/
 
 ## Test Results
 
-The library includes a comprehensive test suite with **177 tests, 0 failures**:
+The library includes a comprehensive test suite with **454 tests, 0 failures** (313 runtime tests in `NCbor.Tests`, 141 generator tests in `NCbor.Generator.Tests`). Highlights:
 
 - **NCborSerializerTests** (12+ tests): Core serialization functionality
 - **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases  

@@ -218,26 +218,27 @@ public class ModelFidelityGeneratorTests
     public void FastPath_PlainSettablePoco_DeserializeBodyIsUnchanged()
     {
         // Pins the historical new-then-set output so the general construction path can't leak
-        // into plain POCOs (and change generated code for every existing user). The one deliberate
-        // change since: reference-type properties read CBOR null back as null (System.Text.Json
-        // parity), so `Name` carries the null check.
+        // into plain POCOs (and change generated code for every existing user). The deliberate
+        // changes since: reference-type properties read CBOR null back as null (System.Text.Json
+        // parity), so `Name` carries the null check; and type names are `global::`-qualified and locals
+        // explicitly typed (a user type named `var` would otherwise hijack `var x = ...`).
         var result = GeneratorHarness.AssertCompilesCleanly(Wrap("""
             public class Simple { public int Id { get; set; } public string Name { get; set; } = ""; }
             """, "[NCborSerializable(typeof(Simple))]"));
 
         var expected = """
-            var result = new Models.Simple();
+            global::Models.Simple result = new global::Models.Simple();
             reader.ReadStartMap();
-            while (reader.PeekState() != CborReaderState.EndMap)
+            while (reader.PeekState() != global::System.Formats.Cbor.CborReaderState.EndMap)
             {
-                var propertyName = reader.ReadTextString();
+                string propertyName = reader.ReadTextString();
                 switch (propertyName)
                 {
                     case "Id":
                         result.Id = reader.ReadInt32();
                         break;
                     case "Name":
-                        result.Name = (reader.PeekState() == CborReaderState.Null ? ReadNullValue<string>(reader)! : reader.ReadTextString());
+                        result.Name = (reader.PeekState() == global::System.Formats.Cbor.CborReaderState.Null ? ReadNullValue<string>(reader)! : reader.ReadTextString());
                         break;
                     default:
                         reader.SkipValue();
@@ -264,11 +265,11 @@ public class ModelFidelityGeneratorTests
             """, "[NCborSerializable(typeof(R))]"));
 
         var text = result.AllGeneratedText;
-        text.Should().Contain("var result = new Models.R(__v_A) { Init = __v_Init, Req = __v_Req };");
+        text.Should().Contain("global::Models.R result = new global::Models.R(__v_A) { Init = __v_Init, Req = __v_Req };");
         text.Should().Contain("if (__h_Plain) result.Plain = __v_Plain;");
         text.Should().NotContain("__h_Init").And.NotContain("__h_A");
         // Required: a presence flag only to throw when the key is missing, never a post-assignment.
-        text.Should().Contain("if (!__h_Req) throw new NCborDeserializationException(").And.NotContain("result.Req =");
+        text.Should().Contain("if (!__h_Req) throw new global::NCbor.NCborDeserializationException(").And.NotContain("result.Req =");
     }
 
     [Fact]
@@ -284,7 +285,7 @@ public class ModelFidelityGeneratorTests
             """, "[NCborSerializable(typeof(P))]"));
 
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
-        result.AllGeneratedText.Should().Contain("new Models.P(__v_X, __v_Y)");
+        result.AllGeneratedText.Should().Contain("new global::Models.P(__v_X, __v_Y)");
     }
 
     [Fact]
@@ -293,7 +294,7 @@ public class ModelFidelityGeneratorTests
         var result = GeneratorHarness.AssertCompilesCleanly(Wrap(
             "public readonly record struct P(int X, int Y);", "[NCborSerializable(typeof(P))]"));
 
-        result.AllGeneratedText.Should().Contain("new Models.P(__v_X, __v_Y)");
+        result.AllGeneratedText.Should().Contain("new global::Models.P(__v_X, __v_Y)");
     }
 
     [Fact]
@@ -379,7 +380,7 @@ public class ModelFidelityGeneratorTests
         cbor010[0].Location.IsInSource.Should().BeTrue("the diagnostic points at the type");
         result.GeneratedCodeErrors.Should().BeEmpty("a throwing Deserialize stub is emitted instead of an uncompilable `new Widget()`");
         result.CompilationErrors.Should().BeEmpty();
-        result.AllGeneratedText.Should().Contain("throw new NCborDeserializationException(typeof(Models.Widget)");
+        result.AllGeneratedText.Should().Contain("throw new global::NCbor.NCborDeserializationException(typeof(global::Models.Widget)");
     }
 
     [Fact]

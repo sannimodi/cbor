@@ -55,7 +55,10 @@ internal static partial class SerializationCodeGenerator
     /// <list type="bullet">
     /// <item>Fast path — <c>new T()</c> then assign each property as its key is read. Used for
     /// plain settable POCOs (no constructor parameters, no init-only or required members) and
-    /// kept byte-for-byte identical to the generator's historical output.</item>
+    /// kept to the generator's historical shape (pinned by
+    /// <c>FastPath_PlainSettablePoco_DeserializeBodyIsUnchanged</c>; since then only the
+    /// reference-type null handling, <c>global::</c> qualification and explicitly typed locals
+    /// changed).</item>
     /// <item>General path — read every value into a local (plus a "was present" flag for plain
     /// setters), then <c>new T(ctorArgs) { InitOrRequired = ... }</c>, then assign plain setters
     /// only when their key was present so property initializers survive an omitted key.</item>
@@ -66,12 +69,12 @@ internal static partial class SerializationCodeGenerator
     {
         var builder = new StringBuilder();
         var resolution = ResolveConstructor(typeSymbol);
-        var typeName = typeSymbol.ToDisplayString();
+        var typeName = TypeRef(typeSymbol);
 
         if (resolution.Kind == ConstructorKind.None)
         {
             var message = $"Type '{typeSymbol.Name}' has no constructor NCbor can use for deserialization ({resolution.Problem}). See generator diagnostic CBOR010.";
-            builder.AppendLine($"throw new NCborDeserializationException(typeof({typeName}), {ToStringLiteral(message)});");
+            builder.AppendLine($"throw new global::NCbor.NCborDeserializationException(typeof({typeName}), {ToStringLiteral(message)});");
             return builder.ToString();
         }
 
@@ -80,18 +83,18 @@ internal static partial class SerializationCodeGenerator
 
         if (resolution.Kind == ConstructorKind.Parameterless && requiredMembers.Count == 0 && !properties.Any(IsInitOnlyProperty))
         {
-            builder.AppendLine($"var result = new {typeName}();");
+            builder.AppendLine($"{typeName} result = new {typeName}();");
             builder.AppendLine("reader.ReadStartMap();");
-            builder.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
+            builder.AppendLine("while (reader.PeekState() != global::System.Formats.Cbor.CborReaderState.EndMap)");
             builder.AppendLine("{");
-            builder.AppendLine("    var propertyName = reader.ReadTextString();");
+            builder.AppendLine("    string propertyName = reader.ReadTextString();");
             builder.AppendLine("    switch (propertyName)");
             builder.AppendLine("    {");
             foreach (var property in properties)
             {
                 var propertyName = GetPropertyName(property, namingPolicy);
-                builder.AppendLine($"        case \"{propertyName}\":");
-                builder.AppendLine($"            result.{property.Name} = {GeneratePropertyDeserialization(property, names)};");
+                builder.AppendLine($"        case {SymbolDisplay.FormatLiteral(propertyName, quote: true)}:");
+                builder.AppendLine($"            result.{EscapeIdentifier(property.Name)} = {GeneratePropertyDeserialization(property, names)};");
                 builder.AppendLine("            break;");
             }
             builder.AppendLine("        default:");
@@ -129,7 +132,7 @@ internal static partial class SerializationCodeGenerator
 
         foreach (var property in properties)
         {
-            var propertyType = property.Type.ToDisplayString();
+            var propertyType = TypeRef(property.Type);
             // Constructor/initializer values are always passed, present in the payload or not, so
             // seed them with what an absent key means:
             // - [NCborDefaultValue] omits the key on write when the value equals the default, so
@@ -158,15 +161,15 @@ internal static partial class SerializationCodeGenerator
             }
         }
         builder.AppendLine("reader.ReadStartMap();");
-        builder.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
+        builder.AppendLine("while (reader.PeekState() != global::System.Formats.Cbor.CborReaderState.EndMap)");
         builder.AppendLine("{");
-        builder.AppendLine("    var propertyName = reader.ReadTextString();");
+        builder.AppendLine("    string propertyName = reader.ReadTextString();");
         builder.AppendLine("    switch (propertyName)");
         builder.AppendLine("    {");
         foreach (var property in properties)
         {
             var propertyName = GetPropertyName(property, namingPolicy);
-            builder.AppendLine($"        case \"{propertyName}\":");
+            builder.AppendLine($"        case {SymbolDisplay.FormatLiteral(propertyName, quote: true)}:");
             builder.AppendLine($"            __v_{property.Name} = {GeneratePropertyDeserialization(property, names)};");
             if (TracksPresence(property))
             {
@@ -184,7 +187,7 @@ internal static partial class SerializationCodeGenerator
         foreach (var property in properties.Where(MustBePresent))
         {
             var message = $"Required property '{property.Name}' (CBOR key '{GetPropertyName(property, namingPolicy)}') was not found in the payload.";
-            builder.AppendLine($"if (!__h_{property.Name}) throw new NCborDeserializationException(typeof({typeName}), {SymbolDisplay.FormatLiteral(message, quote: true)});");
+            builder.AppendLine($"if (!__h_{property.Name}) throw new global::NCbor.NCborDeserializationException(typeof({typeName}), {SymbolDisplay.FormatLiteral(message, quote: true)});");
         }
 
         // Parameters with no serialized property (unmatched, or matched to an ignored one) get
@@ -196,26 +199,26 @@ internal static partial class SerializationCodeGenerator
                 var matched = FindSerializedPropertyForParameter(p, allProperties, properties);
                 return matched != null
                     ? $"__v_{matched.Name}"
-                    : FormatParameterDefaultValue(p) ?? $"default({p.Type.ToDisplayString()})!";
+                    : FormatParameterDefaultValue(p) ?? $"default({TypeRef(p.Type)})!";
             });
 
-        var initializers = properties.Where(IsInInitializer).Select(p => $"{p.Name} = __v_{p.Name}").ToList();
+        var initializers = properties.Where(IsInInitializer).Select(p => $"{EscapeIdentifier(p.Name)} = __v_{p.Name}").ToList();
         if (!setsRequiredMembers)
         {
             // Required members that aren't serialized (ignored, or fields — see CBOR014) must
             // still be set or the object creation doesn't compile (CS9035).
             var serializedNames = new HashSet<string>(properties.Select(p => p.Name), StringComparer.Ordinal);
-            initializers.AddRange(requiredMembers.Where(m => !serializedNames.Contains(m.Name)).Select(m => $"{m.Name} = default!"));
+            initializers.AddRange(requiredMembers.Where(m => !serializedNames.Contains(m.Name)).Select(m => $"{EscapeIdentifier(m.Name)} = default!"));
         }
 
         var creation = $"new {typeName}({string.Join(", ", ctorArgs)})";
         builder.AppendLine(initializers.Count == 0
-            ? $"var result = {creation};"
-            : $"var result = {creation} {{ {string.Join(", ", initializers)} }};");
+            ? $"{typeName} result = {creation};"
+            : $"{typeName} result = {creation} {{ {string.Join(", ", initializers)} }};");
 
         foreach (var property in properties.Where(IsConditionallyAssigned))
         {
-            builder.AppendLine($"if (__h_{property.Name}) result.{property.Name} = __v_{property.Name};");
+            builder.AppendLine($"if (__h_{property.Name}) result.{EscapeIdentifier(property.Name)} = __v_{property.Name};");
         }
 
         builder.AppendLine("return result;");
@@ -307,6 +310,78 @@ internal static partial class SerializationCodeGenerator
         while (ns.ContainingNamespace is { IsGlobalNamespace: false } parent)
             ns = parent;
         return !ns.IsGlobalNamespace && (ns.Name == "System" || ns.Name == "Microsoft");
+    }
+
+    /// <summary>
+    /// Framework bases whose own settable properties are infrastructure rather than model data
+    /// (<c>Exception.HelpLink</c>/<c>Source</c>/<c>HResult</c>, <c>Component.Site</c>). CBOR015
+    /// stops scanning a skipped framework base chain at these, so the common
+    /// <c>MyError : Exception</c> / <c>MyAttribute : Attribute</c> / <c>MyComponent : Component</c>
+    /// subclasses don't get a warning about state nobody expects to serialize.
+    /// </summary>
+    private static readonly string[] InfrastructureFrameworkBases =
+    {
+        "System.Exception",
+        "System.Attribute",
+        "System.ComponentModel.Component",
+    };
+
+    /// <summary>
+    /// CBOR015: when the base-chain walk (see <see cref="GetTypeChainBaseFirst"/>) stops at a
+    /// framework base, the public instance properties of the skipped framework chain that have a
+    /// public getter and a public setter — real data the user may reasonably expect to round-trip
+    /// (<c>UriBuilder.Host</c>, <c>HttpRequestMessage.RequestUri</c>, ...) — minus any the user
+    /// redeclared. Returns null when nothing is dropped. The result names the source type whose
+    /// direct base is the framework type (not <paramref name="typeSymbol"/>, which may derive from
+    /// it further down), so every type sharing that base reports the same diagnostic, once.
+    /// Enumerable types are left to CBOR013 (<c>MyList : List&lt;int&gt;</c> drops its elements,
+    /// which matters far more than <c>Capacity</c>).
+    /// </summary>
+    public static (INamedTypeSymbol DerivedType, INamedTypeSymbol FrameworkBase, IReadOnlyList<string> Properties)? GetDroppedFrameworkBaseProperties(INamedTypeSymbol typeSymbol)
+    {
+        INamedTypeSymbol? derived = null;
+        INamedTypeSymbol? frameworkBase = null;
+        for (var current = typeSymbol; current.BaseType is { } baseType; current = baseType)
+        {
+            if (baseType.SpecialType == SpecialType.System_Object || baseType.SpecialType == SpecialType.System_ValueType)
+                return null;
+            if (IsFrameworkType(baseType))
+            {
+                derived = current;
+                frameworkBase = baseType;
+                break;
+            }
+        }
+
+        if (derived == null || frameworkBase == null || IsFrameworkType(derived) || IsEnumerable(derived))
+            return null;
+
+        var redeclared = new HashSet<string>(GetAllInstanceProperties(derived).Select(p => p.Name), StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var dropped = new List<string>();
+        for (var level = frameworkBase; level != null; level = level.BaseType)
+        {
+            if (level.SpecialType == SpecialType.System_Object || level.SpecialType == SpecialType.System_ValueType ||
+                InfrastructureFrameworkBases.Contains(level.OriginalDefinition.ToDisplayString()))
+            {
+                break;
+            }
+
+            foreach (var property in level.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (property.IsStatic || property.IsIndexer || property.DeclaredAccessibility != Accessibility.Public)
+                    continue;
+                if (GetEffectiveAccessor(property, getter: true) is not { DeclaredAccessibility: Accessibility.Public } ||
+                    GetEffectiveAccessor(property, getter: false) is not { DeclaredAccessibility: Accessibility.Public })
+                {
+                    continue;
+                }
+                if (!redeclared.Contains(property.Name) && seen.Add(property.Name))
+                    dropped.Add(property.Name);
+            }
+        }
+
+        return dropped.Count == 0 ? null : (derived, frameworkBase, dropped);
     }
 
     private static bool IsEqualityContract(IPropertySymbol property) =>
@@ -488,7 +563,7 @@ internal static partial class SerializationCodeGenerator
         if (!parameter.HasExplicitDefaultValue)
             return null;
 
-        var typeName = parameter.Type.ToDisplayString();
+        var typeName = TypeRef(parameter.Type);
         var value = parameter.ExplicitDefaultValue;
         // `= null` / `= default` on any type (reference, Nullable<T>, or a struct like Guid).
         if (value == null)

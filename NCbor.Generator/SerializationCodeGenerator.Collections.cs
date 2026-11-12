@@ -104,20 +104,20 @@ internal static partial class SerializationCodeGenerator
             case "ICollection`1":
             case "IReadOnlyList`1":
             case "IReadOnlyCollection`1":
-                info = new CollectionInfo(CollectionKind.List, args[0], null, null, $"System.Collections.Generic.List<{args[0].ToDisplayString()}>", hasCount: true);
+                info = new CollectionInfo(CollectionKind.List, args[0], null, null, $"global::System.Collections.Generic.List<{TypeRef(args[0])}>", hasCount: true);
                 return true;
             case "IEnumerable`1":
-                info = new CollectionInfo(CollectionKind.List, args[0], null, null, $"System.Collections.Generic.List<{args[0].ToDisplayString()}>", hasCount: false);
+                info = new CollectionInfo(CollectionKind.List, args[0], null, null, $"global::System.Collections.Generic.List<{TypeRef(args[0])}>", hasCount: false);
                 return true;
             case "HashSet`1":
             case "ISet`1":
             case "IReadOnlySet`1":
-                info = new CollectionInfo(CollectionKind.Set, args[0], null, null, $"System.Collections.Generic.HashSet<{args[0].ToDisplayString()}>", hasCount: true);
+                info = new CollectionInfo(CollectionKind.Set, args[0], null, null, $"global::System.Collections.Generic.HashSet<{TypeRef(args[0])}>", hasCount: true);
                 return true;
             case "Dictionary`2":
             case "IDictionary`2":
             case "IReadOnlyDictionary`2":
-                info = new CollectionInfo(CollectionKind.Dictionary, null, args[0], args[1], $"System.Collections.Generic.Dictionary<{args[0].ToDisplayString()}, {args[1].ToDisplayString()}>", hasCount: true);
+                info = new CollectionInfo(CollectionKind.Dictionary, null, args[0], args[1], $"global::System.Collections.Generic.Dictionary<{TypeRef(args[0])}, {TypeRef(args[1])}>", hasCount: true);
                 return true;
             default:
                 return false;
@@ -295,7 +295,7 @@ internal static partial class SerializationCodeGenerator
 
     /// <summary>Expression of type <paramref name="type"/> that throws <c>NCborDeserializationException</c>.</summary>
     internal static string GenerateUnsupportedRead(ITypeSymbol type) =>
-        $"{UnsupportedReadHelperName}<{type.ToDisplayString()}>({ToStringLiteral(type.ToDisplayString())})";
+        $"{UnsupportedReadHelperName}<{TypeRef(type)}>({ToStringLiteral(type.ToDisplayString())})";
 
     internal static ITypeSymbol StripNullableAnnotation(ITypeSymbol type) =>
         type.IsReferenceType && type.NullableAnnotation == NullableAnnotation.Annotated
@@ -366,7 +366,7 @@ internal static partial class SerializationCodeGenerator
         {
             if (underlying!.TypeKind == TypeKind.Enum)
             {
-                return $"(reader.PeekState() == CborReaderState.Null ? ReadNullEnum<{underlying.ToDisplayString()}>(reader) : {GenerateDirectDeserialization(underlying)})";
+                return $"(reader.PeekState() == global::System.Formats.Cbor.CborReaderState.Null ? ReadNullEnum<{TypeRef(underlying)}>(reader) : {GenerateDirectDeserialization(underlying)})";
             }
             return $"ReadNullable{underlying.Name}(reader)";
         }
@@ -379,8 +379,8 @@ internal static partial class SerializationCodeGenerator
         {
             // `!`: a null on the wire was written from a null element, so it round-trips even when
             // this shared TypeInfo was generated from the non-annotated declaration (see above).
-            var nonNullable = elementType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
-            return $"(reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullable}>(reader)! : {core})";
+            var nonNullable = TypeRef(elementType.WithNullableAnnotation(NullableAnnotation.NotAnnotated));
+            return $"(reader.PeekState() == global::System.Formats.Cbor.CborReaderState.Null ? ReadNullValue<{nonNullable}>(reader)! : {core})";
         }
 
         return core;

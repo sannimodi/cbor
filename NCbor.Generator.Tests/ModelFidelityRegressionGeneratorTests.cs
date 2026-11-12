@@ -115,8 +115,8 @@ public class ModelFidelityRegressionGeneratorTests
         var text = result.AllGeneratedText;
         text.Should().Contain("int __v_A = (int)(42);");
         text.Should().Contain("string __v_S = (string)(\"d\\\"e\\nf\");");
-        text.Should().Contain("Models.Color __v_C = (Models.Color)(3);");
-        text.Should().Contain("System.Guid __v_G = default(System.Guid)!;");
+        text.Should().Contain("global::Models.Color __v_C = (global::Models.Color)(3);");
+        text.Should().Contain("global::System.Guid __v_G = default(global::System.Guid)!;");
         text.Should().Contain("int? __v_N = default(int?)!;");
         text.Should().Contain("float __v_F = (float)(float.NaN);");
         text.Should().Contain("double __v_D = (double)(1.5d);");
@@ -134,7 +134,7 @@ public class ModelFidelityRegressionGeneratorTests
             "[NCborSerializable(typeof(OptIgnored))]"));
 
         result.DiagnosticsWithId("CBOR006").Should().ContainSingle();
-        result.AllGeneratedText.Should().Contain("new Models.OptIgnored((int)(3), __v_B)");
+        result.AllGeneratedText.Should().Contain("new global::Models.OptIgnored((int)(3), __v_B)");
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public class ModelFidelityRegressionGeneratorTests
             """, "[NCborSerializable(typeof(Req))]"));
 
         var text = result.AllGeneratedText;
-        text.Should().Contain("if (!__h_Name) throw new NCborDeserializationException(typeof(Models.Req), \"Required property 'Name' (CBOR key 'Name') was not found in the payload.\");");
+        text.Should().Contain("if (!__h_Name) throw new global::NCbor.NCborDeserializationException(typeof(global::Models.Req), \"Required property 'Name' (CBOR key 'Name') was not found in the payload.\");");
         text.Should().NotContain("__h_Note").And.NotContain("__h_Level");
     }
 
@@ -185,10 +185,10 @@ public class ModelFidelityRegressionGeneratorTests
         var text = result.AllGeneratedText;
         text.Should().Contain("if (__h_X) result.X = __v_X;");
         text.Should().Contain("if (__h_S) result.S = __v_S;");
-        text.Should().NotContain("throw new NCborDeserializationException(typeof(Models.Req2), \"Required");
+        text.Should().NotContain("throw new global::NCbor.NCborDeserializationException(typeof(global::Models.Req2), \"Required");
         // Known limit: an init-only member can only be set in the initializer, so it is always
         // passed (and the constructor's value lost when its key is absent).
-        text.Should().Contain("var result = new Models.Req2() { I = __v_I };");
+        text.Should().Contain("global::Models.Req2 result = new global::Models.Req2() { I = __v_I };");
     }
 
     // ---------- Item 7 ----------
@@ -206,7 +206,7 @@ public class ModelFidelityRegressionGeneratorTests
             """, "[NCborSerializable(typeof(SV))]"));
 
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
-        result.AllGeneratedText.Should().Contain("var result = new Models.SV();").And.NotContain("new Models.SV(__v_");
+        result.AllGeneratedText.Should().Contain("global::Models.SV result = new global::Models.SV();").And.NotContain("new global::Models.SV(__v_");
     }
 
     [Fact]
@@ -222,7 +222,7 @@ public class ModelFidelityRegressionGeneratorTests
             """, "[NCborSerializable(typeof(P))]"));
 
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
-        result.AllGeneratedText.Should().Contain("new Models.P(__v_X)").And.Contain("if (__h_Y) result.Y = __v_Y;");
+        result.AllGeneratedText.Should().Contain("new global::Models.P(__v_X)").And.Contain("if (__h_Y) result.Y = __v_Y;");
     }
 
     // ---------- Item 9 ----------
@@ -242,7 +242,7 @@ public class ModelFidelityRegressionGeneratorTests
         result.DiagnosticsWithId("CBOR005").Select(d => d.GetMessage()).Should().ContainSingle()
             .Which.Should().Contain("'Value'");
         result.DiagnosticsWithId("CBOR006").Should().BeEmpty();
-        result.AllGeneratedText.Should().Contain("new Models.CaseClash(__v_value)");
+        result.AllGeneratedText.Should().Contain("new global::Models.CaseClash(__v_value)");
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public class ModelFidelityRegressionGeneratorTests
 
         result.DiagnosticsWithId("CBOR006").Select(d => d.GetMessage()).Should().ContainSingle()
             .Which.Should().Contain("'vALUE'");
-        result.AllGeneratedText.Should().Contain("new Models.Twin(default(int)!)");
+        result.AllGeneratedText.Should().Contain("new global::Models.Twin(default(int)!)");
     }
 
     // ---------- Item 10a ----------

@@ -72,7 +72,7 @@ public class DiscoveryAndCollectionGeneratorTests
                      "ListOfArrayOfByte", "ArrayOfByte", "Node", "ListOfNode",
                  })
         {
-            text.Should().MatchRegex($@"public NCborTypeInfo<[^\n]*> {property} \{{ get; \}}",
+            text.Should().MatchRegex($@"public global::NCbor.NCborTypeInfo<[^\n]*> {property} \{{ get; \}}",
                 $"{property} should be discovered and, like every public model here, exposed as a public property");
         }
 
@@ -192,7 +192,7 @@ public class DiscoveryAndCollectionGeneratorTests
             """);
 
         var text = result.AllGeneratedText;
-        text.Should().Contain("new System.Collections.Generic.HashSet<string>()");
+        text.Should().Contain("new global::System.Collections.Generic.HashSet<string>()");
         text.Should().Contain("writer.WriteStartArray(null);", "IEnumerable<T> has no Count and is written as an indefinite-length array");
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
     }
@@ -416,14 +416,14 @@ public class DiscoveryAndCollectionGeneratorTests
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
         result.GeneratedCodeWarnings.Should().BeEmpty(result.ToString());
         var text = result.AllGeneratedText;
-        text.Should().Contain("NCborTypeInfo<global::A.Item> Item { get; }", "the first claimant keeps the simple name");
-        text.Should().Contain("NCborTypeInfo<global::B.Item> B_Item { get; }");
-        text.Should().Contain("NCborTypeInfo<global::System.Collections.Generic.List<global::B.Item>> ListOfB_Item { get; }");
-        text.Should().Contain("NCborTypeInfo<global::B.Item[]> ArrayOfB_Item { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::A.Item> Item { get; }", "the first claimant keeps the simple name");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::B.Item> B_Item { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::System.Collections.Generic.List<global::B.Item>> ListOfB_Item { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::B.Item[]> ArrayOfB_Item { get; }");
         text.Should().Contain("_context.B_Item.Serialize(writer, value.Second, depth + 1);");
         text.Should().Contain("_context.B_Item.Deserialize(reader, depth + 1)");
-        text.Should().Contain("Type t when t == typeof(global::B.Item) => (NCborTypeInfo<T>)(object)B_Item,");
-        text.Should().Contain("private sealed class B_ItemTypeInfo : NCborTypeInfo<global::B.Item>");
+        text.Should().Contain("global::System.Type t when t == typeof(global::B.Item) => (global::NCbor.NCborTypeInfo<T>)(object)B_Item,");
+        text.Should().Contain("private sealed class B_ItemTypeInfo : global::NCbor.NCborTypeInfo<global::B.Item>");
     }
 
     [Fact]
@@ -453,9 +453,9 @@ public class DiscoveryAndCollectionGeneratorTests
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
         result.GeneratedCodeWarnings.Should().BeEmpty(result.ToString());
         var text = result.AllGeneratedText;
-        text.Should().Contain("NCborTypeInfo<global::Models.Default> Models_Default { get; }");
-        text.Should().Contain("NCborTypeInfo<global::Models.Equals> Models_Equals { get; }");
-        text.Should().Contain("NCborTypeInfo<global::Models.Helper> Models_Helper { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::Models.Default> Models_Default { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::Models.Equals> Models_Equals { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::Models.Helper> Models_Helper { get; }");
     }
 
     [Fact]
@@ -487,10 +487,10 @@ public class DiscoveryAndCollectionGeneratorTests
 
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
         var text = result.AllGeneratedText;
-        text.Should().Contain("NCborTypeInfo<int> Int32 { get; }");
-        text.Should().Contain("NCborTypeInfo<global::Models.Int32> Models_Int32 { get; }");
-        text.Should().Contain("NCborTypeInfo<global::System.Collections.Generic.List<string>> ListOfString { get; }");
-        text.Should().Contain("NCborTypeInfo<global::Models.ListOfString> Models_ListOfString { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<int> Int32 { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::Models.Int32> Models_Int32 { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::System.Collections.Generic.List<string>> ListOfString { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::Models.ListOfString> Models_ListOfString { get; }");
     }
 
     [Fact]
@@ -520,8 +520,8 @@ public class DiscoveryAndCollectionGeneratorTests
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
         var text = result.AllGeneratedText;
         text.Should().NotContain("InnerOf", "a type nested in a generic type has no type arguments of its own");
-        text.Should().Contain("NCborTypeInfo<global::Models.Outer<int>.Inner> Inner { get; }");
-        text.Should().Contain("NCborTypeInfo<global::Models.Outer<string>.Inner> OuterOfString_Inner { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::Models.Outer<int>.Inner> Inner { get; }");
+        text.Should().Contain("global::NCbor.NCborTypeInfo<global::Models.Outer<string>.Inner> OuterOfString_Inner { get; }");
     }
 
     // ---------- Visibility ----------
@@ -558,11 +558,11 @@ public class DiscoveryAndCollectionGeneratorTests
             """);
 
         var text = result.AllGeneratedText;
-        text.Should().Contain("internal NCborTypeInfo<global::Models.InternalRoot> InternalRoot");
-        text.Should().Contain("internal NCborTypeInfo<global::Models.InternalChild> InternalChild");
-        text.Should().Contain("internal NCborTypeInfo<global::System.Collections.Generic.List<global::Models.InternalChild>> ListOfInternalChild");
-        text.Should().Contain("internal NCborTypeInfo<global::Models.Outer.NestedInternal> NestedInternal");
-        text.Should().Contain("public NCborTypeInfo<global::Models.PublicRoot> PublicRoot");
+        text.Should().Contain("internal global::NCbor.NCborTypeInfo<global::Models.InternalRoot> InternalRoot");
+        text.Should().Contain("internal global::NCbor.NCborTypeInfo<global::Models.InternalChild> InternalChild");
+        text.Should().Contain("internal global::NCbor.NCborTypeInfo<global::System.Collections.Generic.List<global::Models.InternalChild>> ListOfInternalChild");
+        text.Should().Contain("internal global::NCbor.NCborTypeInfo<global::Models.Outer.NestedInternal> NestedInternal");
+        text.Should().Contain("public global::NCbor.NCborTypeInfo<global::Models.PublicRoot> PublicRoot");
     }
 
     // ---------- Built-in registrations ----------
@@ -608,9 +608,9 @@ public class DiscoveryAndCollectionGeneratorTests
             """);
 
         var text = result.AllGeneratedText;
-        text.Should().Contain("public NCborTypeInfo<int> Int32 { get; }");
-        text.Should().Contain("public NCborTypeInfo<int?> NullableOfInt32 { get; }");
-        text.Should().Contain("Type t when t == typeof(int) => (NCborTypeInfo<T>)(object)Int32,");
+        text.Should().Contain("public global::NCbor.NCborTypeInfo<int> Int32 { get; }");
+        text.Should().Contain("public global::NCbor.NCborTypeInfo<int?> NullableOfInt32 { get; }");
+        text.Should().Contain("global::System.Type t when t == typeof(int) => (global::NCbor.NCborTypeInfo<T>)(object)Int32,");
         // Registered Nullable<int> must not be treated as a POCO (CBOR005 on HasValue/Value).
         result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
     }

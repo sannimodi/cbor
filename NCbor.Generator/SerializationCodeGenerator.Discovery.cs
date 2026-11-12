@@ -60,13 +60,16 @@ internal sealed class ContextTypeNames
 
     /// <summary>
     /// The assigned name for <paramref name="type"/> (nullable annotations and tuple element names
-    /// ignored, as in discovery). Falls back to the simple name for a type discovery never saw
-    /// rather than throwing — a generator exception would drop every context's output.
+    /// ignored, as in discovery), as an identifier ready to emit: a keyword is escaped
+    /// (<c>@event</c>; the TypeInfo class is then <c>@eventTypeInfo</c>, which is also legal).
+    /// Falls back to the simple name for a type discovery never saw rather than throwing — a
+    /// generator exception would drop every context's output.
     /// </summary>
     public string Get(ITypeSymbol type) =>
-        _names.TryGetValue(SerializationCodeGenerator.NormalizeForDiscovery(type), out var name)
-            ? name
-            : SerializationCodeGenerator.GetPropertyNameFromType(type);
+        SerializationCodeGenerator.EscapeIdentifier(
+            _names.TryGetValue(SerializationCodeGenerator.NormalizeForDiscovery(type), out var name)
+                ? name
+                : SerializationCodeGenerator.GetPropertyNameFromType(type));
 }
 
 /// <summary>Output of <see cref="SerializationCodeGenerator.DiscoverTypeClosure"/>.</summary>
@@ -264,7 +267,11 @@ internal static partial class SerializationCodeGenerator
     /// Names a generated context property must not take: members the generator always emits
     /// (Default, GetTypeInfo, the nullable/throw helpers), the context's own name and type
     /// parameters, and every member the context declares or inherits (members the user wrote in
-    /// another partial declaration, <c>object.Equals</c>, ...).
+    /// another partial declaration, <c>object.Equals</c>, ...) — nested types included, which
+    /// <see cref="INamespaceOrTypeSymbol.GetTypeMembers()"/> lists but <c>MemberNames</c> does not.
+    /// Since <see cref="AssignContextPropertyNames"/> also checks <c>{name}TypeInfo</c> against this
+    /// set, a user member named <c>HelperTypeInfo</c> keeps the generated class off that name too.
+    /// All names are unescaped (<c>event</c>, not <c>@event</c>), as Roslyn reports them.
     /// </summary>
     private static HashSet<string> GetReservedMemberNames(INamedTypeSymbol contextType)
     {
@@ -289,6 +296,8 @@ internal static partial class SerializationCodeGenerator
         {
             foreach (var memberName in current.MemberNames)
                 reserved.Add(memberName);
+            foreach (var nestedType in current.GetTypeMembers())
+                reserved.Add(nestedType.Name);
         }
 
         return reserved;

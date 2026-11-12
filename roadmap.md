@@ -213,7 +213,10 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
   chunked-byte-string wire encoding fixed in Phase 2.5's byte[] handling ([GAPS.md](GAPS.md)
   GAP-10, done 2026-07-04) — that chunks the CBOR encoding of an already-in-memory `byte[]`;
   this item would mean accepting `Stream`/`IAsyncEnumerable` inputs so the full payload never
-  needs to be materialized at all. Still not implemented.
+  needs to be materialized at all. Still not implemented. **Partial groundwork**:
+  `NCborSerializer` has `Stream`/`SerializeAsync`/`DeserializeAsync`, `IBufferWriter<byte>` and
+  `ReadOnlyMemory<byte>` overloads (System.Text.Json-shaped API surface), but they buffer the full
+  payload in memory — they are a convenience, not progressive processing.
 - **Deliverables**:
   - `SerializeToStream<T>()` and `DeserializeFromStream<T>()` methods
   - Progressive serialization for large collections

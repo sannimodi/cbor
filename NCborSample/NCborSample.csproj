@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Formats.Cbor" Version="10.0.0-preview.5.25277.114" />
+    <PackageReference Include="System.Formats.Cbor" Version="10.0.15" />
   </ItemGroup>
 
 </Project>

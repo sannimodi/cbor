@@ -73,7 +73,7 @@ See the [specification document](cbor-serialization-specs.md) for learning more 
 ## Requirements
 
 - .NET 10 (preview) or .NET 8+ 
-- System.Formats.Cbor package (10.0.0-preview.5.25277.114 for .NET 10)
+- System.Formats.Cbor package (10.0.15)
 
 ## Installation
 
@@ -172,9 +172,12 @@ The `NCborSourceGenerationOptions` attribute supports several naming conventions
 ### ⚠️ **Identified Improvement Opportunities**
 
 **🟡 Low Priority**
-- **Streaming Support**: no `Stream`/`IAsyncEnumerable`-based API for large payloads — everything
-  is in-memory `byte[]` in, `byte[]` out (roadmap.md Phase 2.5.3). Note this is different from
-  byte[] chunked wire encoding, which *is* implemented — see [GAPS.md](GAPS.md) GAP-10.
+- **Streaming Support**: `NCborSerializer` now has `Stream` (sync + async), `IBufferWriter<byte>`,
+  and `ReadOnlyMemory<byte>` overloads, but they are **buffered, not streaming** — the whole payload
+  is still materialized in memory, because `System.Formats.Cbor`'s `CborReader`/`CborWriter` are not
+  streaming. True incremental processing of large payloads is still open (roadmap.md Phase 2.5.3).
+  Note this is different from byte[] chunked wire encoding, which *is* implemented — see
+  [GAPS.md](GAPS.md) GAP-10.
 
 See [GAPS.md](GAPS.md) for the full, current list — circular reference detection, array memory
 optimization, and byte[] chunked encoding (previously listed here) were all implemented 2026-07-04.

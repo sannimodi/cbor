@@ -75,10 +75,10 @@ dotnet pack NCbor/NCbor.csproj --configuration Release
 dotnet pack NCbor.Generator/NCbor.Generator.csproj --configuration Release
 ```
 
-**Known issue to resolve before publishing** (see [GAPS.md](GAPS.md) GAP-12): packing `NCbor`
-currently emits `NU5104` — a stable `1.0.0` package shouldn't depend on the prerelease
-`System.Formats.Cbor 10.0.0-preview.5.25277.114`. Check whether a stable `System.Formats.Cbor`
-now exists for .NET 10 GA and update the reference before publishing a stable version.
+~~**Known issue to resolve before publishing**: packing `NCbor` emitted `NU5104` because it
+depended on the prerelease `System.Formats.Cbor 10.0.0-preview.5.25277.114`.~~ **Fixed** (see
+[GAPS.md](GAPS.md) GAP-12): now pinned to stable `System.Formats.Cbor 10.0.15`; `dotnet pack` no
+longer emits `NU5104`.
 
 ### Publishing to NuGet
 

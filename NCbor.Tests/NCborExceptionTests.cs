@@ -251,7 +251,7 @@ public class NCborExceptionTests
     public void Deserialize_WithNullData_ThrowsArgumentNullException()
     {
         // Act & Assert
-        var act = () => NCborSerializer.Deserialize(null!, _context.SimpleModel);
+        var act = () => NCborSerializer.Deserialize((byte[])null!, _context.SimpleModel);
         act.Should().Throw<ArgumentNullException>()
            .WithParameterName("data");
     }

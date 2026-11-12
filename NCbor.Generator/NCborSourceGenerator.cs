@@ -48,6 +48,11 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         "CBOR012", "NCbor Generator",
         "Context '{0}' is nested in '{1}', which is not declared partial. NCbor generates the context's members inside its containing types, so every containing type must be partial.",
         "Usage", DiagnosticSeverity.Error, true);
+
+    private static readonly DiagnosticDescriptor RequiredFieldNotSerialized = new DiagnosticDescriptor(
+        "CBOR014", "NCbor Generator",
+        "Required field '{0}' on type '{1}' is not serialized (NCbor serializes properties only); it will deserialize as default. Make it a property, or set it from a [SetsRequiredMembers] constructor.",
+        "Usage", DiagnosticSeverity.Warning, true);
 #pragma warning restore RS2008, RS1032
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -183,6 +188,12 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             foreach (var misused in SerializationCodeGenerator.GetMisusedEnumAsStringProperties(registeredType))
             {
                 diagnostics.Add(DiagnosticInfo.Create(MisusedEnumAsString, misused.Locations.FirstOrDefault(), misused.Name, registeredType.Name));
+            }
+
+            // Warn about required fields: never serialized, so they're forced to default! to compile.
+            foreach (var field in SerializationCodeGenerator.GetDefaultedRequiredFields(registeredType))
+            {
+                diagnostics.Add(DiagnosticInfo.Create(RequiredFieldNotSerialized, field.Locations.FirstOrDefault(), field.Name, field.ContainingType.Name));
             }
         }
 

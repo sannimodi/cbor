@@ -106,29 +106,53 @@ internal static partial class SerializationCodeGenerator
 
         var constructor = resolution.ParameterizedConstructor;
         var setsRequiredMembers = resolution.Constructor != null && HasAttribute(resolution.Constructor, SetsRequiredMembersAttributeName);
-        var requiredNames = new HashSet<string>(requiredMembers.Select(m => m.Name), StringComparer.Ordinal);
+        var allProperties = GetAllInstanceProperties(typeSymbol);
+        // Under [SetsRequiredMembers] the constructor already sets the required members, so they
+        // are treated like any other member: not forced into the initializer (which would
+        // clobber the constructor's values with defaults) and not required in the payload.
+        var requiredNames = setsRequiredMembers
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : new HashSet<string>(requiredMembers.Select(m => m.Name), StringComparer.Ordinal);
 
         // A property is fed from exactly one place: a constructor argument, the object
         // initializer (init-only / required — neither can be assigned afterwards), or a
         // conditional assignment after construction (plain setter).
-        bool IsConstructorArgument(IPropertySymbol p) => constructor != null && FindMatchingParameter(constructor, p) != null;
+        IParameterSymbol? ParameterFor(IPropertySymbol p) => constructor == null ? null : FindMatchingParameter(constructor, p, allProperties);
+        bool IsConstructorArgument(IPropertySymbol p) => ParameterFor(p) != null;
         bool IsInInitializer(IPropertySymbol p) => requiredNames.Contains(p.Name) || (!IsConstructorArgument(p) && IsInitOnlyProperty(p));
         bool IsConditionallyAssigned(IPropertySymbol p) => !IsConstructorArgument(p) && !IsInInitializer(p);
+        // A required member's key must be in the payload (as in System.Text.Json) — unless NCbor's
+        // own writer may omit it ([NCborDefaultValue] / WhenWritingNull / WhenWritingDefault), in
+        // which case an absent key means "the omitted value", so it must not throw.
+        bool MustBePresent(IPropertySymbol p) => requiredNames.Contains(p.Name) && GetWriteGuard(p, defaultIgnoreCondition) == null;
+        bool TracksPresence(IPropertySymbol p) => IsConditionallyAssigned(p) || MustBePresent(p);
 
         foreach (var property in properties)
         {
             var propertyType = property.Type.ToDisplayString();
-            // Constructor/initializer values are always passed, present in the payload or not.
-            // [NCborDefaultValue] omits the key on write when the value equals the default, so
-            // seed with that default — otherwise the read side would get default(T) instead.
+            // Constructor/initializer values are always passed, present in the payload or not, so
+            // seed them with what an absent key means:
+            // - [NCborDefaultValue] omits the key on write when the value equals the default, so
+            //   seed with that default — otherwise the read side would get default(T) instead;
+            // - otherwise the constructor parameter's own default (`int A = 42`), as a caller
+            //   omitting the argument would get — unless an ignore condition may omit the key on
+            //   write, where absent means default(T)/null and the parameter default would be wrong.
             var seed = "default!";
-            if (!IsConditionallyAssigned(property) &&
-                GetDefaultValueAttribute(property) is { ConstructorArguments.Length: > 0 } defaultValueAttr)
+            if (!IsConditionallyAssigned(property))
             {
-                seed = $"({propertyType})({FormatDefaultValueLiteral(defaultValueAttr.ConstructorArguments[0])})!";
+                if (GetDefaultValueAttribute(property) is { ConstructorArguments.Length: > 0 } defaultValueAttr)
+                {
+                    seed = $"({propertyType})({FormatDefaultValueLiteral(defaultValueAttr.ConstructorArguments[0])})!";
+                }
+                else if (ParameterFor(property) is { } parameter &&
+                         GetWriteGuard(property, defaultIgnoreCondition) == null &&
+                         FormatParameterDefaultValue(parameter) is { } parameterDefault)
+                {
+                    seed = parameterDefault;
+                }
             }
             builder.AppendLine($"{propertyType} __v_{property.Name} = {seed};");
-            if (IsConditionallyAssigned(property))
+            if (TracksPresence(property))
             {
                 builder.AppendLine($"bool __h_{property.Name} = false;");
             }
@@ -144,7 +168,7 @@ internal static partial class SerializationCodeGenerator
             var propertyName = GetPropertyName(property, namingPolicy);
             builder.AppendLine($"        case \"{propertyName}\":");
             builder.AppendLine($"            __v_{property.Name} = {GeneratePropertyDeserialization(property)};");
-            if (IsConditionallyAssigned(property))
+            if (TracksPresence(property))
             {
                 builder.AppendLine($"            __h_{property.Name} = true;");
             }
@@ -157,19 +181,29 @@ internal static partial class SerializationCodeGenerator
         builder.AppendLine("}");
         builder.AppendLine("reader.ReadEndMap();");
 
+        foreach (var property in properties.Where(MustBePresent))
+        {
+            var message = $"Required property '{property.Name}' (CBOR key '{GetPropertyName(property, namingPolicy)}') was not found in the payload.";
+            builder.AppendLine($"if (!__h_{property.Name}) throw new NCborDeserializationException(typeof({typeName}), {SymbolDisplay.FormatLiteral(message, quote: true)});");
+        }
+
+        // Parameters with no serialized property (unmatched, or matched to an ignored one) get
+        // their own default value when they declare one, else default(T).
         var ctorArgs = constructor == null
             ? Enumerable.Empty<string>()
             : constructor.Parameters.Select(p =>
             {
-                var matched = FindMatchingProperty(properties, p);
-                return matched != null ? $"__v_{matched.Name}" : $"default({p.Type.ToDisplayString()})!";
+                var matched = FindSerializedPropertyForParameter(p, allProperties, properties);
+                return matched != null
+                    ? $"__v_{matched.Name}"
+                    : FormatParameterDefaultValue(p) ?? $"default({p.Type.ToDisplayString()})!";
             });
 
         var initializers = properties.Where(IsInInitializer).Select(p => $"{p.Name} = __v_{p.Name}").ToList();
         if (!setsRequiredMembers)
         {
-            // Required members that aren't serialized (ignored, or fields) must still be set or
-            // the object creation doesn't compile (CS9035).
+            // Required members that aren't serialized (ignored, or fields — see CBOR014) must
+            // still be set or the object creation doesn't compile (CS9035).
             var serializedNames = new HashSet<string>(properties.Select(p => p.Name), StringComparer.Ordinal);
             initializers.AddRange(requiredMembers.Where(m => !serializedNames.Contains(m.Name)).Select(m => $"{m.Name} = default!"));
         }
@@ -189,25 +223,30 @@ internal static partial class SerializationCodeGenerator
     }
 
     /// <summary>
-    /// Every instance property NCbor can read on <paramref name="typeSymbol"/>, across the whole
-    /// base chain: base-first, declaration order within each level. A property re-declared in a
-    /// derived class (<c>override</c> or <c>new</c>) appears once, as the most-derived symbol, in
-    /// the slot of its first declaration — exactly what <c>value.Name</c> binds to in the
-    /// generated code. Excludes static properties, indexers, the record-synthesized
-    /// <c>EqualityContract</c>, and anything the generated code can't reach (see
-    /// <see cref="IsReachable"/>), including properties whose getter it can't call.
+    /// Every instance property NCbor can read on <paramref name="typeSymbol"/>, across its base
+    /// chain up to (not including) the first framework base type (see
+    /// <see cref="GetTypeChainBaseFirst"/>): base-first, declaration order within each level. A
+    /// property re-declared in a derived class (<c>override</c> or <c>new</c>, static or not)
+    /// appears once, as the most-derived symbol, in the slot of its first declaration — exactly
+    /// what <c>value.Name</c> binds to in the generated code; if that symbol is static (a
+    /// <c>new static</c> property hiding an instance one) the name is dropped. Excludes static
+    /// properties, indexers, the record-synthesized <c>EqualityContract</c>, and anything the
+    /// generated code can't reach (see <see cref="IsReachable"/>), including properties whose
+    /// getter it can't call.
     /// </summary>
     private static List<IPropertySymbol> GetAllInstanceProperties(INamedTypeSymbol typeSymbol)
     {
         var ordered = new List<IPropertySymbol>();
         var slotByName = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var level in GetTypeChainBaseFirst(typeSymbol))
+        foreach (var level in GetTypeChainBaseFirst(typeSymbol, stopAtFrameworkBase: true))
         {
             foreach (var property in level.GetMembers().OfType<IPropertySymbol>())
             {
                 // Inaccessible members are dropped *before* de-duplication: C# member lookup
                 // ignores them, so a private `new` property doesn't hide a public base one.
-                if (property.IsStatic || property.IsIndexer || IsEqualityContract(property) || !IsReachable(property))
+                // Statics are dropped *after* it: a `new static` property hides an instance one
+                // of the same name, so `value.Name` would bind to the static (CS0176).
+                if (property.IsIndexer || IsEqualityContract(property) || !IsReachable(property))
                     continue;
 
                 if (slotByName.TryGetValue(property.Name, out var slot))
@@ -222,20 +261,52 @@ internal static partial class SerializationCodeGenerator
             }
         }
 
-        return ordered.Where(p => GetEffectiveAccessor(p, getter: true) is { } getter && IsReachable(getter)).ToList();
+        return ordered
+            .Where(p => !p.IsStatic)
+            .Where(p => GetEffectiveAccessor(p, getter: true) is { } getter && IsReachable(getter))
+            .ToList();
     }
 
-    private static IEnumerable<INamedTypeSymbol> GetTypeChainBaseFirst(INamedTypeSymbol typeSymbol)
+    /// <summary>
+    /// <paramref name="typeSymbol"/> and its base types, base-first, excluding
+    /// <c>object</c>/<c>ValueType</c>. With <paramref name="stopAtFrameworkBase"/>, the walk also
+    /// stops at the first <i>base</i> type that is a framework type (see
+    /// <see cref="IsFrameworkType"/>): a user type deriving from <c>Exception</c>,
+    /// <c>Component</c>, <c>Attribute</c>, <c>List&lt;T&gt;</c>, ... serializes only the members
+    /// declared on its own (non-framework) levels, not <c>HResult</c>/<c>Site</c>/<c>TypeId</c>.
+    /// User base types from other assemblies are still walked. The starting type itself is never
+    /// cut off.
+    /// </summary>
+    private static IEnumerable<INamedTypeSymbol> GetTypeChainBaseFirst(INamedTypeSymbol typeSymbol, bool stopAtFrameworkBase)
     {
         var chain = new List<INamedTypeSymbol>();
         for (var current = typeSymbol; current != null; current = current.BaseType)
         {
             if (current.SpecialType == SpecialType.System_Object || current.SpecialType == SpecialType.System_ValueType)
                 break;
+            if (stopAtFrameworkBase && chain.Count > 0 && IsFrameworkType(current))
+                break;
             chain.Add(current);
         }
         chain.Reverse();
         return chain;
+    }
+
+    /// <summary>
+    /// A type that comes from metadata (not this compilation) and lives in the <c>System</c> or
+    /// <c>Microsoft</c> namespace or one of their sub-namespaces.
+    /// </summary>
+    private static bool IsFrameworkType(INamedTypeSymbol type)
+    {
+        if (IsDeclaredInSource(type))
+            return false;
+
+        var ns = type.OriginalDefinition.ContainingNamespace;
+        if (ns == null)
+            return false;
+        while (ns.ContainingNamespace is { IsGlobalNamespace: false } parent)
+            ns = parent;
+        return !ns.IsGlobalNamespace && (ns.Name == "System" || ns.Name == "Microsoft");
     }
 
     private static bool IsEqualityContract(IPropertySymbol property) =>
@@ -289,6 +360,10 @@ internal static partial class SerializationCodeGenerator
     private static bool IsInitOnlyProperty(IPropertySymbol property) =>
         GetEffectiveAccessor(property, getter: false) is { IsInitOnly: true };
 
+    /// <summary>A usable setter that isn't <c>init</c> — assignable after construction.</summary>
+    private static bool HasPlainSetter(IPropertySymbol property) =>
+        HasUsableSetter(property) && !IsInitOnlyProperty(property);
+
     /// <summary>
     /// Required properties and fields across the base chain (most-derived declaration wins).
     /// Every one of them has to appear in the object initializer unless the constructor is
@@ -298,7 +373,9 @@ internal static partial class SerializationCodeGenerator
     {
         var ordered = new List<ISymbol>();
         var slotByName = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var level in GetTypeChainBaseFirst(typeSymbol))
+        // The full chain, framework bases included: a required member anywhere has to be set or
+        // the object creation doesn't compile (CS9035), even one NCbor doesn't serialize.
+        foreach (var level in GetTypeChainBaseFirst(typeSymbol, stopAtFrameworkBase: false))
         {
             foreach (var member in level.GetMembers())
             {
@@ -325,11 +402,12 @@ internal static partial class SerializationCodeGenerator
     /// <list type="number">
     /// <item><c>[NCborConstructor]</c> wins (CBOR007 reports more than one).</item>
     /// <item>Otherwise an accessible parameterless constructor (<c>new T()</c>) — except that a
-    /// struct's implicit parameterless constructor loses to an explicit matching one below, or
-    /// readonly structs / readonly record structs would silently deserialize to default.</item>
+    /// struct's implicit parameterless constructor loses to an explicit matching one below when
+    /// that constructor covers a property with no plain setter, or readonly structs / readonly
+    /// record structs would silently deserialize to default.</item>
     /// <item>Otherwise the single accessible constructor whose parameters all match a property by
-    /// name (case-insensitive) and type, ignoring a record's copy constructor; if several match,
-    /// the primary constructor among them.</item>
+    /// name (see <see cref="FindMatchingProperty"/>) and type, ignoring a record's copy
+    /// constructor; if several match, the primary constructor among them.</item>
     /// <item>Otherwise none — CBOR010.</item>
     /// </list>
     /// </summary>
@@ -353,9 +431,8 @@ internal static partial class SerializationCodeGenerator
         var properties = GetAllInstanceProperties(typeSymbol);
         var matching = usable
             .Where(c => c.Parameters.Length > 0 && !IsCopyConstructor(c, typeSymbol))
-            .Where(c => c.Parameters.All(param => properties.Any(prop =>
-                string.Equals(prop.Name, param.Name, StringComparison.OrdinalIgnoreCase) &&
-                SymbolEqualityComparer.Default.Equals(prop.Type, param.Type))))
+            .Where(c => c.Parameters.All(param => FindMatchingProperty(properties, param) is { } prop &&
+                SymbolEqualityComparer.Default.Equals(prop.Type, param.Type)))
             .ToList();
 
         IMethodSymbol? picked = null;
@@ -372,8 +449,15 @@ internal static partial class SerializationCodeGenerator
 
         if (parameterless != null)
         {
-            if (typeSymbol.IsValueType && parameterless.IsImplicitlyDeclared && picked != null)
+            // A struct always has the implicit `new T()`. Prefer the explicit constructor only
+            // when it covers a property that setters can't reach (get-only, or init-only as in a
+            // readonly record struct); otherwise `new T()` + setters, as for classes, so a
+            // validating constructor isn't run against an absent key.
+            if (typeSymbol.IsValueType && parameterless.IsImplicitlyDeclared && picked != null &&
+                picked.Parameters.Any(param => FindMatchingProperty(properties, param) is { } prop && !HasPlainSetter(prop)))
+            {
                 return ConstructorResolution.Parameterized(picked);
+            }
             return ConstructorResolution.Parameterless(parameterless);
         }
 
@@ -394,11 +478,82 @@ internal static partial class SerializationCodeGenerator
     private static bool IsPrimaryConstructor(IMethodSymbol constructor) =>
         constructor.DeclaringSyntaxReferences.Any(r => r.GetSyntax() is TypeDeclarationSyntax);
 
+    /// <summary>
+    /// A C# expression for <paramref name="parameter"/>'s explicit default value (<c>= 42</c>,
+    /// <c>= "def"</c>, <c>= MyEnum.B</c>, <c>= null</c>, <c>= default</c>), cast to the
+    /// parameter's type; null when it declares none.
+    /// </summary>
+    private static string? FormatParameterDefaultValue(IParameterSymbol parameter)
+    {
+        if (!parameter.HasExplicitDefaultValue)
+            return null;
+
+        var typeName = parameter.Type.ToDisplayString();
+        var value = parameter.ExplicitDefaultValue;
+        // `= null` / `= default` on any type (reference, Nullable<T>, or a struct like Guid).
+        if (value == null)
+            return $"default({typeName})!";
+
+        // Enum (and Nullable<enum>) defaults arrive as the boxed underlying number.
+        var isEnum = parameter.Type.TypeKind == TypeKind.Enum || TryGetNullableEnumUnderlyingType(parameter.Type, out _);
+        var literal = isEnum
+            ? Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "0"
+            : FormatConstantLiteral(value);
+        return $"({typeName})({literal})";
+    }
+
+    /// <summary>A C# literal for a compile-time constant value (non-null, non-enum).</summary>
+    private static string FormatConstantLiteral(object value)
+    {
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        return value switch
+        {
+            bool b => b ? "true" : "false",
+            string s => SymbolDisplay.FormatLiteral(s, quote: true),
+            char c => SymbolDisplay.FormatLiteral(c, quote: true),
+            double d when double.IsNaN(d) => "double.NaN",
+            double d when double.IsPositiveInfinity(d) => "double.PositiveInfinity",
+            double d when double.IsNegativeInfinity(d) => "double.NegativeInfinity",
+            double d => d.ToString("R", invariant) + "d",
+            float f when float.IsNaN(f) => "float.NaN",
+            float f when float.IsPositiveInfinity(f) => "float.PositiveInfinity",
+            float f when float.IsNegativeInfinity(f) => "float.NegativeInfinity",
+            float f => f.ToString("R", invariant) + "f",
+            decimal m => m.ToString(invariant) + "m",
+            long l => l.ToString(invariant) + "L",
+            uint ui => ui.ToString(invariant) + "u",
+            ulong ul => ul.ToString(invariant) + "ul",
+            _ => Convert.ToString(value, invariant) ?? "default",
+        };
+    }
+
     private static bool HasAttribute(ISymbol symbol, string attributeFullName) =>
         symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attributeFullName);
 
     private static string ToStringLiteral(string value) =>
         "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+    /// <summary>
+    /// CBOR014: <c>required</c> fields the generated Deserialize has to set to <c>default!</c>
+    /// (NCbor serializes properties only, but a required member must appear in the object
+    /// initializer or the creation doesn't compile). Empty when the constructor deserialization
+    /// uses is <c>[SetsRequiredMembers]</c> (the constructor sets them instead), when no
+    /// constructor is usable (CBOR010), and for non-object types.
+    /// </summary>
+    public static IEnumerable<IFieldSymbol> GetDefaultedRequiredFields(INamedTypeSymbol typeSymbol)
+    {
+        if (!IsPlainObjectType(typeSymbol) || HasAmbiguousConstructors(typeSymbol))
+            return Enumerable.Empty<IFieldSymbol>();
+
+        var resolution = ResolveConstructor(typeSymbol);
+        if (resolution.Kind == ConstructorKind.None ||
+            (resolution.Constructor != null && HasAttribute(resolution.Constructor, SetsRequiredMembersAttributeName)))
+        {
+            return Enumerable.Empty<IFieldSymbol>();
+        }
+
+        return GetRequiredMembers(typeSymbol).OfType<IFieldSymbol>();
+    }
 
     /// <summary>
     /// CBOR010: reasons the type can't be deserialized because no constructor is usable. Empty

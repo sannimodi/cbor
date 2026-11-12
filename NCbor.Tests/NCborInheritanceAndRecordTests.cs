@@ -65,7 +65,7 @@ public class RenamedVirtualBase
 
 public class RenamedVirtualOverride : RenamedVirtualBase
 {
-    // No attribute here: attributes are read from the most-derived declaration only.
+    // No attribute here: the override inherits [NCborPropertyName("lbl")] from the base.
     public override string Label { get; set; } = "";
 }
 
@@ -225,13 +225,14 @@ public class NCborInheritanceAndRecordTests
     }
 
     [Fact]
-    public void OverrideWithoutAttribute_DoesNotInheritBasePropertyName()
+    public void OverrideWithoutAttribute_InheritsBasePropertyName()
     {
-        // Documented behavior: NCbor attributes are read from the most-derived declaration of an
-        // overridden property only (re-declare them on the override to keep them).
+        // An override that doesn't re-declare an NCbor attribute inherits it from the overridden
+        // property, so base and derived agree on the wire.
         var data = NCborSerializer.Serialize(new RenamedVirtualOverride { Label = "x" }, _context.RenamedVirtualOverride);
 
-        ReadPropertyNames(data).Should().Equal("Label");
+        ReadPropertyNames(data).Should().Equal("lbl");
+        NCborSerializer.Deserialize(data, _context.RenamedVirtualOverride).Label.Should().Be("x");
     }
 
     // ---------- init / required ----------

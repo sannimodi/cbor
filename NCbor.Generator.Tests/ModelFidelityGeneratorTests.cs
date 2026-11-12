@@ -68,13 +68,13 @@ public class ModelFidelityGeneratorTests
                 """, "[NCborSerializable(typeof(Settings))]")
         },
         {
-            "required members, including one on a base class and a required field",
+            // A required *field* is covered by CBOR014 in ModelFidelityRegressionGeneratorTests.
+            "required members, including one on a base class",
             Wrap("""
                 public class Base { public required string Id { get; set; } }
                 public class Req : Base
                 {
                     public required int Count { get; init; }
-                    public required int Field;
                     public int Plain { get; set; }
                 }
                 """, "[NCborSerializable(typeof(Req))]")
@@ -266,7 +266,9 @@ public class ModelFidelityGeneratorTests
         var text = result.AllGeneratedText;
         text.Should().Contain("var result = new Models.R(__v_A) { Init = __v_Init, Req = __v_Req };");
         text.Should().Contain("if (__h_Plain) result.Plain = __v_Plain;");
-        text.Should().NotContain("__h_Init").And.NotContain("__h_Req").And.NotContain("__h_A");
+        text.Should().NotContain("__h_Init").And.NotContain("__h_A");
+        // Required: a presence flag only to throw when the key is missing, never a post-assignment.
+        text.Should().Contain("if (!__h_Req) throw new NCborDeserializationException(").And.NotContain("result.Req =");
     }
 
     [Fact]

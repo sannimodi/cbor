@@ -59,3 +59,31 @@ public class NCborTrailingDataTests
         NCborSerializer.Deserialize(bytes, _context.SimpleModel).Age.Should().Be(5);
     }
 }
+
+public class NCborMalformedPayloadTests
+{
+    [Fact]
+    public void DuplicateMapKey_IsReportedAsNCborException_NotRawArgumentException()
+    {
+        // {"a": 1, "a": 2} — hand-encoded, since CborWriter refuses to produce it.
+        var bytes = new byte[] { 0xA2, 0x61, 0x61, 0x01, 0x61, 0x61, 0x02 };
+
+        var ex = Record.Exception(() => NCborSerializer.Deserialize(bytes, TestNCborContext.Default.DictionaryOfStringAndInt32));
+
+        ex.Should().NotBeNull();
+        ex.Should().Match(e => e is NCborDeserializationException || e is NCborValidationException);
+    }
+
+    [Fact]
+    public void UnknownEnumName_ThrowsNCborDeserializationException_NotRawArgumentException()
+    {
+        var writer = new System.Formats.Cbor.CborWriter();
+        writer.WriteStartMap(1);
+        writer.WriteTextString("Role");
+        writer.WriteTextString("NoSuchRole");
+        writer.WriteEndMap();
+
+        var act = () => NCborSerializer.Deserialize(writer.Encode(), TestNCborContext.Default.EnumAsStringModel);
+        act.Should().Throw<NCborDeserializationException>().WithInnerException<ArgumentException>();
+    }
+}

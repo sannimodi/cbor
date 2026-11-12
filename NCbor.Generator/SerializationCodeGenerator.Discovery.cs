@@ -135,7 +135,7 @@ internal static partial class SerializationCodeGenerator
             // reference: report it alone, with no stub and none of the per-type checks (CBOR010...).
             if (IsOpenGenericType(type))
             {
-                unsupported.Add(new UnsupportedTypeUsage(type, origin, $"open generic types cannot be registered (register a closed type, e.g. {type.Name}<int>)"));
+                unsupported.Add(new UnsupportedTypeUsage(type, origin, "open generic types cannot be registered (register a closed constructed type with concrete type arguments instead)"));
                 return;
             }
 

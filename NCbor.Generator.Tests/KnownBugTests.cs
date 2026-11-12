@@ -71,7 +71,8 @@ public class KnownBugTests
             """);
     }
 
-    [Fact(Skip = "Known bug: collection-typed properties dispatch to a context property (ListOfListOfInt32) that only exists if that exact collection type is registered on the context (CS1061).")]
+    // Fixed: transitive type discovery generates ListOfListOfInt32 / ListOfInt32 automatically.
+    [Fact]
     public void NestedListProperty_WithoutRegisteringNestedTypes_CompilesCleanly()
     {
         GeneratorHarness.AssertCompilesCleanly("""
@@ -91,7 +92,8 @@ public class KnownBugTests
             """);
     }
 
-    [Fact(Skip = "Known bug: IReadOnlyList<T> is not recognized as a collection; even when registered, its TypeInfo is generated as a plain object and does `new IReadOnlyList<int>()` (CS0144).")]
+    // Fixed: IReadOnlyList<T> is in the collection table and deserializes into List<T>.
+    [Fact]
     public void IReadOnlyListProperty_CompilesCleanly()
     {
         // IReadOnlyList<int> is registered explicitly so this isolates the interface-collection

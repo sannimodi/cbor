@@ -1,6 +1,6 @@
 namespace NCbor.Generator;
 
-internal static class SerializationCodeGenerator
+internal static partial class SerializationCodeGenerator
 {
     public static string GenerateSerializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this", NCborIgnoreCondition defaultIgnoreCondition = NCborIgnoreCondition.Never)
     {
@@ -10,25 +10,31 @@ internal static class SerializationCodeGenerator
             builder.AppendLine(GenerateByteStringWrite("value"));
             return builder.ToString();
         }
-        if (IsList(typeSymbol, out var elementType))
+        // Registered built-ins (e.g. [NCborSerializable(typeof(int))]) and Nullable<built-in>.
+        if (IsBuiltInType(typeSymbol) || IsNullableBuiltInType(typeSymbol))
         {
-            if (elementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid list type.");
-                
-            builder.AppendLine("writer.WriteStartArray(value.Count);");
+            builder.AppendLine(GenerateElementWrite("value", typeSymbol, contextRef));
+            return builder.ToString();
+        }
+        if (TryGetCollectionInfo(typeSymbol, out var collection))
+        {
+            if (collection.Kind == CollectionKind.Dictionary)
+            {
+                builder.AppendLine("writer.WriteStartMap(value.Count);");
+                builder.AppendLine($"foreach (var kvp in value)");
+                builder.AppendLine("{");
+                builder.AppendLine($"    {GenerateElementWrite("kvp.Key", collection.KeyType!, contextRef)}");
+                builder.AppendLine($"    {GenerateElementWrite("kvp.Value", collection.ValueType!, contextRef)}");
+                builder.AppendLine("}");
+                builder.AppendLine("writer.WriteEndMap();");
+                return builder.ToString();
+            }
+
+            // IEnumerable<T> has no Count: write an indefinite-length array rather than enumerate twice.
+            builder.AppendLine(collection.HasCount ? "writer.WriteStartArray(value.Count);" : "writer.WriteStartArray(null);");
             builder.AppendLine($"foreach (var item in value)");
             builder.AppendLine("{");
-            
-            // Handle built-in types directly, complex types via context
-            if (IsBuiltInType(elementType))
-            {
-                builder.AppendLine($"    {GenerateDirectSerialization("item", elementType)}");
-            }
-            else
-            {
-                builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(elementType)}.Serialize(writer, item, depth + 1);");
-            }
+            builder.AppendLine($"    {GenerateElementWrite("item", collection.ElementType!, contextRef)}");
             builder.AppendLine("}");
             builder.AppendLine("writer.WriteEndArray();");
             return builder.ToString();
@@ -37,58 +43,13 @@ internal static class SerializationCodeGenerator
         {
             if (arrayElementType == null)
                 throw new InvalidOperationException("Element type cannot be null for a valid array type.");
-                
+
             builder.AppendLine("writer.WriteStartArray(value.Length);");
             builder.AppendLine($"foreach (var item in value)");
             builder.AppendLine("{");
-            
-            // Handle built-in types directly, complex types via context
-            if (IsBuiltInType(arrayElementType))
-            {
-                builder.AppendLine($"    {GenerateDirectSerialization("item", arrayElementType)}");
-            }
-            else
-            {
-                builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Serialize(writer, item, depth + 1);");
-            }
+            builder.AppendLine($"    {GenerateElementWrite("item", arrayElementType, contextRef)}");
             builder.AppendLine("}");
             builder.AppendLine("writer.WriteEndArray();");
-            return builder.ToString();
-        }
-        if (IsDictionary(typeSymbol, out var keyType, out var valueType))
-        {
-            if (keyType == null || valueType == null)
-                throw new InvalidOperationException("Key and value types cannot be null for a valid dictionary type.");
-                
-            builder.AppendLine("writer.WriteStartMap(value.Count);");
-            builder.AppendLine($"foreach (var kvp in value)");
-            builder.AppendLine("{");
-            
-            // Serialize key
-            builder.AppendLine("    // Serialize key");
-            if (IsBuiltInType(keyType))
-            {
-                builder.AppendLine($"    {GenerateDirectSerialization("kvp.Key", keyType)}");
-            }
-            else
-            {
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(keyType)}.Serialize(writer, kvp.Key, depth + 1);");
-            }
-
-            // Serialize value
-            builder.AppendLine("    // Serialize value");
-            if (IsBuiltInType(valueType))
-            {
-                builder.AppendLine($"    {GenerateDirectSerialization("kvp.Value", valueType)}");
-            }
-            else
-            {
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(valueType)}.Serialize(writer, kvp.Value, depth + 1);");
-            }
-            
-            builder.AppendLine("}");
-            builder.AppendLine("writer.WriteEndMap();");
             return builder.ToString();
         }
         var properties = GetSerializableProperties(typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties"), defaultIgnoreCondition);
@@ -122,28 +83,40 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("return reader.ReadByteString();");
             return builder.ToString();
         }
-        if (IsList(typeSymbol, out var elementType))
+        // Registered built-ins (e.g. [NCborSerializable(typeof(int))]) and Nullable<built-in>.
+        if (IsBuiltInType(typeSymbol) || IsNullableBuiltInType(typeSymbol))
         {
-            if (elementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid list type.");
-                
-            builder.AppendLine($"var list = new System.Collections.Generic.List<{elementType.ToDisplayString()}>();");
+            builder.AppendLine($"return {GenerateElementRead(typeSymbol, contextRef)};");
+            return builder.ToString();
+        }
+        if (TryGetCollectionInfo(typeSymbol, out var collection))
+        {
+            if (collection.Kind == CollectionKind.Dictionary)
+            {
+                builder.AppendLine($"var dictionary = new {collection.ConcreteTypeName}();");
+                builder.AppendLine("int? mapSize = reader.ReadStartMap();");
+                builder.AppendLine("for (int i = 0; mapSize == null || i < mapSize; i++)");
+                builder.AppendLine("{");
+                builder.AppendLine("    if (mapSize == null && reader.PeekState() == CborReaderState.EndMap)");
+                builder.AppendLine("        break;");
+                builder.AppendLine($"    var key = {GenerateElementRead(collection.KeyType!, contextRef)};");
+                builder.AppendLine($"    var value = {GenerateElementRead(collection.ValueType!, contextRef)};");
+                builder.AppendLine("    dictionary.Add(key, value);");
+                builder.AppendLine("}");
+                builder.AppendLine("reader.ReadEndMap();");
+                builder.AppendLine("return dictionary;");
+                return builder.ToString();
+            }
+
+            // Interface-typed lists/sets (IReadOnlyList<T>, ISet<T>, ...) deserialize into the
+            // concrete List<T>/HashSet<T>, which is assignable to the declared return type.
+            builder.AppendLine($"var list = new {collection.ConcreteTypeName}();");
             builder.AppendLine("int? length = reader.ReadStartArray();");
             builder.AppendLine("for (int i = 0; length == null || i < length; i++)");
             builder.AppendLine("{");
             builder.AppendLine("    if (length == null && reader.PeekState() == CborReaderState.EndArray)");
             builder.AppendLine("        break;");
-            
-            // Handle built-in types directly, complex types via context
-            if (IsBuiltInType(elementType))
-            {
-                builder.AppendLine($"    var item = {GenerateDirectDeserialization(elementType)};");
-            }
-            else
-            {
-                builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(elementType)}.Deserialize(reader, depth + 1);");
-            }
+            builder.AppendLine($"    var item = {GenerateElementRead(collection.ElementType!, contextRef)};");
             builder.AppendLine("    list.Add(item);");
             builder.AppendLine("}");
             builder.AppendLine("reader.ReadEndArray();");
@@ -156,9 +129,7 @@ internal static class SerializationCodeGenerator
                 throw new InvalidOperationException("Element type cannot be null for a valid array type.");
 
             var elementTypeName = arrayElementType.ToDisplayString();
-            var itemExpression = IsBuiltInType(arrayElementType)
-                ? GenerateDirectDeserialization(arrayElementType)
-                : $"{contextRef}.{GetPropertyNameFromType(arrayElementType)}.Deserialize(reader, depth + 1)";
+            var itemExpression = GenerateElementRead(arrayElementType, contextRef);
 
             // Definite-length arrays (which is everything this library's own writer produces,
             // via WriteStartArray(value.Length)) allocate the array directly instead of paying
@@ -186,46 +157,6 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("}");
             builder.AppendLine("reader.ReadEndArray();");
             builder.AppendLine("return result;");
-            return builder.ToString();
-        }
-        if (IsDictionary(typeSymbol, out var keyType, out var valueType))
-        {
-            if (keyType == null || valueType == null)
-                throw new InvalidOperationException("Key and value types cannot be null for a valid dictionary type.");
-                
-            builder.AppendLine($"var dictionary = new System.Collections.Generic.Dictionary<{keyType.ToDisplayString()}, {valueType.ToDisplayString()}>();");
-            builder.AppendLine("int? mapSize = reader.ReadStartMap();");
-            builder.AppendLine("for (int i = 0; mapSize == null || i < mapSize; i++)");
-            builder.AppendLine("{");
-            builder.AppendLine("    if (mapSize == null && reader.PeekState() == CborReaderState.EndMap)");
-            builder.AppendLine("        break;");
-            
-            // Deserialize key
-            builder.AppendLine("    // Deserialize key");
-            if (IsBuiltInType(keyType))
-            {
-                builder.AppendLine($"    var key = {GenerateDirectDeserialization(keyType)};");
-            }
-            else
-            {
-                builder.AppendLine($"    var key = {contextRef}.{GetPropertyNameFromType(keyType)}.Deserialize(reader, depth + 1);");
-            }
-
-            // Deserialize value
-            builder.AppendLine("    // Deserialize value");
-            if (IsBuiltInType(valueType))
-            {
-                builder.AppendLine($"    var value = {GenerateDirectDeserialization(valueType)};");
-            }
-            else
-            {
-                builder.AppendLine($"    var value = {contextRef}.{GetPropertyNameFromType(valueType)}.Deserialize(reader, depth + 1);");
-            }
-            
-            builder.AppendLine("    dictionary.Add(key, value);");
-            builder.AppendLine("}");
-            builder.AppendLine("reader.ReadEndMap();");
-            builder.AppendLine("return dictionary;");
             return builder.ToString();
         }
         var namedType = typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties");
@@ -638,6 +569,14 @@ internal static class SerializationCodeGenerator
             return $"{GetConverterFieldName(converterType)}.Write(writer, value.{property.Name});";
         }
 
+        // Unsupported types (CBOR009) dispatch to their throwing stub TypeInfo by their exact
+        // type name, bypassing the nullable branches below (which would e.g. emit
+        // ReadNullValue<T> for a Nullable<struct>), so the only build error is CBOR009 itself.
+        if (IsUnsupportedStubbedType(type))
+        {
+            return $"_context.{GetPropertyNameFromType(StripNullableAnnotation(type))}.Serialize(writer, value.{property.Name}, depth + 1);";
+        }
+
         // [NCborEnumAsString] takes priority over the default numeric enum encoding.
         if (HasEnumAsStringAttribute(property))
         {
@@ -716,6 +655,12 @@ internal static class SerializationCodeGenerator
         if (converterType != null)
         {
             return $"{GetConverterFieldName(converterType)}.Read(reader)";
+        }
+
+        // See GeneratePropertySerialization.
+        if (IsUnsupportedStubbedType(type))
+        {
+            return $"_context.{GetPropertyNameFromType(StripNullableAnnotation(type))}.Deserialize(reader, depth + 1)";
         }
 
         // [NCborEnumAsString] takes priority over the default numeric enum encoding.
@@ -797,27 +742,32 @@ internal static class SerializationCodeGenerator
         return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader, depth + 1)";
     }
 
+    /// <summary>
+    /// True for every array-shaped collection in the <see cref="TryGetCollectionInfo"/> table —
+    /// list-like <i>and</i> set-like (<c>HashSet&lt;T&gt;</c>, <c>ISet&lt;T&gt;</c>, ...), so callers such
+    /// as <c>IsPlainObjectType</c> never treat a set as a POCO (CBOR005 on its <c>Count</c>).
+    /// </summary>
     private static bool IsList(ITypeSymbol typeSymbol, out ITypeSymbol? elementType)
     {
-        elementType = null;
-        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "List" && namedType.TypeArguments.Length == 1)
+        if (TryGetCollectionInfo(typeSymbol, out var info) && info.Kind != CollectionKind.Dictionary)
         {
-            elementType = namedType.TypeArguments[0];
+            elementType = info.ElementType;
             return true;
         }
+        elementType = null;
         return false;
     }
 
     private static bool IsDictionary(ITypeSymbol typeSymbol, out ITypeSymbol? keyType, out ITypeSymbol? valueType)
     {
-        keyType = null;
-        valueType = null;
-        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "Dictionary" && namedType.TypeArguments.Length == 2)
+        if (TryGetCollectionInfo(typeSymbol, out var info) && info.Kind == CollectionKind.Dictionary)
         {
-            keyType = namedType.TypeArguments[0];
-            valueType = namedType.TypeArguments[1];
+            keyType = info.KeyType;
+            valueType = info.ValueType;
             return true;
         }
+        keyType = null;
+        valueType = null;
         return false;
     }
 
@@ -834,15 +784,22 @@ internal static class SerializationCodeGenerator
 
     private static bool IsByteArray(ITypeSymbol typeSymbol)
     {
-        return typeSymbol is IArrayTypeSymbol arrayType && arrayType.ElementType.SpecialType == SpecialType.System_Byte;
+        return typeSymbol is IArrayTypeSymbol arrayType && arrayType.Rank == 1 && arrayType.ElementType.SpecialType == SpecialType.System_Byte;
     }
 
-    private static string GetPropertyNameFromType(ITypeSymbol typeSymbol)
+    /// <summary>
+    /// The generated context property name for a type (also the stem of its <c>{Name}TypeInfo</c>
+    /// class). Every reference site computes it from the type, so it must be deterministic.
+    /// Distinct types can still map to one name (same simple name in two namespaces) — that is
+    /// reported as CBOR011 by discovery.
+    /// </summary>
+    internal static string GetPropertyNameFromType(ITypeSymbol typeSymbol)
     {
-        // Handle arrays
+        // Handle arrays (multi-dimensional ones carry their rank so int[,] != int[])
         if (typeSymbol is IArrayTypeSymbol arrayType)
         {
-            return $"ArrayOf{GetPropertyNameFromType(arrayType.ElementType)}";
+            var rankPart = arrayType.Rank == 1 ? "" : $"Rank{arrayType.Rank}";
+            return $"Array{rankPart}Of{GetPropertyNameFromType(arrayType.ElementType)}";
         }
         
         if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType)
@@ -900,7 +857,7 @@ internal static class SerializationCodeGenerator
         return typeSymbol.Name;
     }
 
-    private static bool IsBuiltInType(ITypeSymbol typeSymbol)
+    internal static bool IsBuiltInType(ITypeSymbol typeSymbol)
     {
         // Handle special types
         var isSpecialType = typeSymbol.SpecialType switch

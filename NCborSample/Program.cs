@@ -98,6 +98,31 @@ Console.WriteLine($"  Name: {deserializedImmutablePerson.Name} (expected: {immut
 Console.WriteLine($"  Age: {deserializedImmutablePerson.Age} (expected: {immutablePerson.Age})");
 Console.WriteLine("=== Constructor-Based Deserialization Testing Complete ===\n");
 
+// === COLLECTION INTERFACE / SET TESTING (validates IReadOnlyList<T> -> List<T> and HashSet<T> codegen) ===
+Console.WriteLine("=== Collection Interface / HashSet Testing ===");
+var collectionSample = new CollectionInterfaceSample
+{
+    Name = "Collections",
+    Scores = new List<int> { 3, 1, 4, 1, 5 },
+    Tags = new HashSet<string> { "alpha", "beta", "gamma" },
+    OptionalScores = null
+};
+var collectionWriter = new CborWriter();
+CollectionInterfaceSample.Serialize(collectionWriter, collectionSample);
+var collectionBytes = collectionWriter.Encode();
+var deserializedCollectionSample = CollectionInterfaceSample.Deserialize(new CborReader(collectionBytes));
+var scoresMatch = deserializedCollectionSample.Scores.SequenceEqual(collectionSample.Scores);
+var tagsMatch = deserializedCollectionSample.Tags.SetEquals(collectionSample.Tags);
+Console.WriteLine($"IReadOnlyList<int> round-trip successful: {scoresMatch} (concrete type: {deserializedCollectionSample.Scores.GetType().Name})");
+Console.WriteLine($"HashSet<string> round-trip successful: {tagsMatch} (count: {deserializedCollectionSample.Tags.Count})");
+Console.WriteLine($"Null IReadOnlyList<int>? round-trip successful: {deserializedCollectionSample.OptionalScores == null}");
+collectionSample.OptionalScores = Array.Empty<int>();
+collectionWriter = new CborWriter();
+CollectionInterfaceSample.Serialize(collectionWriter, collectionSample);
+var emptyRoundTrip = CollectionInterfaceSample.Deserialize(new CborReader(collectionWriter.Encode()));
+Console.WriteLine($"Empty IReadOnlyList<int>? round-trip successful: {emptyRoundTrip.OptionalScores is { Count: 0 }}");
+Console.WriteLine("=== Collection Interface / HashSet Testing Complete ===\n");
+
 // Create a comprehensive Person object with all data types
 var person = new Person
 {

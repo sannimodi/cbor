@@ -79,7 +79,10 @@ public class NullHandlingAndContextShapeTests
         result.GeneratedSources.Keys.Should().OnlyHaveUniqueItems();
         result.GeneratedSources.Keys.Should().Contain("N1.Ctx_T_.g.cs", "a name that sanitizes losslessly stays readable");
         result.GeneratedSources.Keys.Should().ContainSingle(k => k.StartsWith("N1.Ctx_T_.", StringComparison.Ordinal) && k != "N1.Ctx_T_.g.cs");
+        // The generic context compiles too: its type parameters are emitted, and the CS0693 its
+        // `T` causes against GetTypeInfo<T> is suppressed in generated code.
         result.AssertCompilesCleanly();
+        result.GeneratedCodeWarnings.Should().BeEmpty(result.FormatDiagnostics(result.GeneratedCodeWarnings));
     }
 
     [Fact]
@@ -260,9 +263,11 @@ public class NullHandlingAndContextShapeTests
         cbor012.Location.IsInSource.Should().BeTrue();
         cbor012.Location.SourceTree!.GetText().ToString(cbor012.Location.SourceSpan).Should().Be("BadContext");
 
-        // The other context is unaffected; nothing is generated for the broken one.
+        // The other context is unaffected; nothing is generated for the broken one, so the only
+        // compiler error is CS0534 (abstract GetTypeInfo<T> not implemented) on BadContext itself.
         result.GeneratedSources.Keys.Should().Equal("Models.Good.GoodContext.g.cs");
         result.GeneratedCodeErrors.Should().BeEmpty();
+        result.CompilationErrors.Select(d => d.Id).Should().Equal("CS0534");
     }
 
     // ---------- Context accessibility ----------

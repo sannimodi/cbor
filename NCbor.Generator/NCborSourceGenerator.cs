@@ -353,8 +353,10 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         builder.AppendLine("#nullable enable");
         // List<string> and List<string?> are one symbol to the generator, so they share a single
         // TypeInfo (whose element code is null-tolerant either way); the nested-nullability
-        // mismatch warnings that sharing produces are not actionable by the user.
-        builder.AppendLine("#pragma warning disable CS8619, CS8620");
+        // mismatch warnings that sharing produces are not actionable by the user. CS0693: a generic
+        // context (or containing type) with a type parameter named T shadows the generated
+        // GetTypeInfo<T>/ReadNullValue<T> type parameters, which is harmless here.
+        builder.AppendLine("#pragma warning disable CS8619, CS8620, CS0693");
         builder.AppendLine();
 
         // Add using statements

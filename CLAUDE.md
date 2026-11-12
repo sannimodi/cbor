@@ -114,6 +114,9 @@ never read by the generator, which does not count as implemented. When you close
 legitimately deep-but-acyclic graph past `MaxDepth` also throws (same tradeoff as
 `System.Text.Json`'s `MaxDepth`). See `NCbor.Tests/NCborCircularReferenceTests.cs`.
 
-Generator diagnostics in use: CBOR005–010, CBOR012–014 (see the table in readme.md). CBOR001–004
-and CBOR011 were removed — never reuse a retired ID; take the next free one (CBOR015).
+Generator diagnostics in use: CBOR005–010, CBOR012–015 (see the table in readme.md). CBOR001–004
+and CBOR011 were removed — never reuse a retired ID; take the next free one (CBOR016).
 Only root types need `[NCborSerializable(typeof(...))]` on a context; nested types are discovered.
+Generated code must reference every type `global::`-qualified (via `TypeRef()`), use explicitly typed
+locals (a user type named `var` breaks `var x = ...`), and `@`-escape identifiers that are C# keywords
+— `IdentifierRobustnessGeneratorTests` guards all three.

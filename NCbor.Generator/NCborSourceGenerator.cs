@@ -34,10 +34,9 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         "Type '{0}' used by {1} is not supported by NCbor: {2}. Change the type, add [NCborConverter] to the property, or mark it [NCborIgnore].",
         "Usage", DiagnosticSeverity.Error, true);
 
-    private static readonly DiagnosticDescriptor PropertyNameCollision = new DiagnosticDescriptor(
-        "CBOR011", "NCbor Generator",
-        "Type '{0}' (reached from {1}) would generate context property '{2}', which is already taken by {3}. Rename one of the types, or nest them so their simple names differ.",
-        "Usage", DiagnosticSeverity.Error, true);
+    // CBOR011 (context property name collision) is retired: colliding types now get
+    // disambiguated property names instead (see SerializationCodeGenerator.AssignContextPropertyNames).
+    // Don't reuse the ID.
 
     private static readonly DiagnosticDescriptor NoUsableConstructor = new DiagnosticDescriptor(
         "CBOR010", "NCbor Generator",
@@ -48,6 +47,11 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         "CBOR012", "NCbor Generator",
         "Context '{0}' is nested in '{1}', which is not declared partial. NCbor generates the context's members inside its containing types, so every containing type must be partial.",
         "Usage", DiagnosticSeverity.Error, true);
+
+    private static readonly DiagnosticDescriptor EnumerableSerializedAsObject = new DiagnosticDescriptor(
+        "CBOR013", "NCbor Generator",
+        "'{0}' implements IEnumerable but is not a supported collection type; it is serialized as an object (its properties), and its elements are not serialized",
+        "Usage", DiagnosticSeverity.Warning, true);
 #pragma warning restore RS2008, RS1032
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -134,16 +138,11 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         // element/key/value types, ...). Every loop below and in GenerateContextSource iterates
         // this closure, not the raw attributes.
         var contextDefaultIgnoreCondition = GetDefaultIgnoreCondition(typeSymbol);
-        var closure = SerializationCodeGenerator.DiscoverTypeClosure(GetRegisteredTypes(serializableAttributes), contextDefaultIgnoreCondition, typeSymbol.Name);
+        var closure = SerializationCodeGenerator.DiscoverTypeClosure(GetRegisteredTypes(serializableAttributes), contextDefaultIgnoreCondition, typeSymbol);
 
         foreach (var usage in closure.Unsupported)
         {
             diagnostics.Add(DiagnosticInfo.Create(UnsupportedType, usage.Origin.Location, usage.Type.ToDisplayString(), usage.Origin.Description, usage.Reason));
-        }
-
-        foreach (var collision in closure.Collisions)
-        {
-            diagnostics.Add(DiagnosticInfo.Create(PropertyNameCollision, collision.Origin.Location, collision.Type.ToDisplayString(), collision.Origin.Description, collision.PropertyName, collision.ConflictsWith));
         }
 
         // Warn about get-only properties that will be silently dropped from serialization
@@ -151,11 +150,18 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         // Only plain objects: collections, arrays, built-ins and registered Nullable<built-in>
         // (whose HasValue/Value would otherwise trip CBOR005) have no properties to check, and
         // CBOR009 types are never in closure.Types, so they get no CBOR005/006/007/008/010 on top.
+        // Diagnostics on a property name the property's declaring type (not registeredType), so a
+        // base member reached from several derived types is reported once (see Distinct below).
         foreach (var registeredType in closure.Types.OfType<INamedTypeSymbol>().Where(t => SerializationCodeGenerator.ClassifyType(t, out _) == TypeShape.PlainObject))
         {
+            if (SerializationCodeGenerator.IsEnumerablePlainObject(registeredType))
+            {
+                diagnostics.Add(DiagnosticInfo.Create(EnumerableSerializedAsObject, registeredType.Locations.FirstOrDefault(), registeredType.ToDisplayString()));
+            }
+
             foreach (var uncovered in SerializationCodeGenerator.GetUncoveredGetOnlyProperties(registeredType, contextDefaultIgnoreCondition))
             {
-                diagnostics.Add(DiagnosticInfo.Create(UncoveredGetOnlyProperty, uncovered.Locations.FirstOrDefault(), uncovered.Name, registeredType.Name));
+                diagnostics.Add(DiagnosticInfo.Create(UncoveredGetOnlyProperty, uncovered.Locations.FirstOrDefault(), uncovered.Name, uncovered.ContainingType.Name));
             }
 
             // Warn about [NCborConstructor] parameters with no matching property — they
@@ -182,7 +188,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             // has no effect today.
             foreach (var misused in SerializationCodeGenerator.GetMisusedEnumAsStringProperties(registeredType))
             {
-                diagnostics.Add(DiagnosticInfo.Create(MisusedEnumAsString, misused.Locations.FirstOrDefault(), misused.Name, registeredType.Name));
+                diagnostics.Add(DiagnosticInfo.Create(MisusedEnumAsString, misused.Locations.FirstOrDefault(), misused.Name, misused.ContainingType.Name));
             }
         }
 
@@ -201,8 +207,10 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             source = GenerateContextSource(typeSymbol, closure);
         }
 
+        // The same diagnostic (id, location, message args) can be produced more than once — e.g. a
+        // base-class member checked once per derived type. Report each one once, in first-seen order.
         var (hintName, disambiguatedHintName) = GetHintNames(typeSymbol);
-        return new ContextModel(hintName, disambiguatedHintName, source, new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+        return new ContextModel(hintName, disambiguatedHintName, source, new EquatableArray<DiagnosticInfo>(diagnostics.Distinct().ToArray()));
     }
 
     /// <summary>The <c>typeof(T)</c> argument of each <c>[NCborSerializable]</c>, in declaration order.</summary>
@@ -397,10 +405,13 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         builder.AppendLine("        return typeof(T) switch");
         builder.AppendLine("        {");
 
+        // Every context property / TypeInfo class name comes from this one per-context map (the
+        // same one the serialize/deserialize code uses for `_context.<Name>` references).
+        var names = closure.Names;
         foreach (var typeSymbol in closure.Types)
         {
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var propertyName = GetPropertyName(typeSymbol);
+            var propertyName = names.Get(typeSymbol);
             builder.AppendLine($"            Type t when t == typeof({typeName}) => (NCborTypeInfo<T>)(object){propertyName},");
         }
 
@@ -414,7 +425,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         foreach (var typeSymbol in closure.Types.Concat(closure.StubTypes))
         {
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var propertyName = GetPropertyNameFromType(typeSymbol);
+            var propertyName = names.Get(typeSymbol);
             builder.AppendLine($"    {SerializationCodeGenerator.GetAccessibilityModifier(typeSymbol)} NCborTypeInfo<{typeName}> {propertyName} {{ get; }}");
         }
 
@@ -424,7 +435,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
 
         foreach (var typeSymbol in closure.Types.Concat(closure.StubTypes))
         {
-            var propertyName = GetPropertyNameFromType(typeSymbol);
+            var propertyName = names.Get(typeSymbol);
             builder.AppendLine($"        {propertyName} = new {propertyName}TypeInfo(this);");
         }
 
@@ -434,7 +445,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         foreach (var typeSymbol in closure.Types)
         {
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var propertyName = GetPropertyNameFromType(typeSymbol);
+            var propertyName = names.Get(typeSymbol);
             builder.AppendLine($"    private sealed class {propertyName}TypeInfo : NCborTypeInfo<{typeName}>");
             builder.AppendLine("    {");
             builder.AppendLine($"        private readonly {contextTypeRef} _context;");
@@ -451,13 +462,13 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             builder.AppendLine($"        public override void Serialize(CborWriter writer, {typeName} value, int depth = 0)");
             builder.AppendLine("        {");
             builder.AppendLine($"            if (depth >= {maxDepth}) throw new NCborSerializationException(typeof({typeName}), \"Maximum serialization depth ({maxDepth}) exceeded at depth \" + depth + \". This usually indicates a circular reference; increase NCborSourceGenerationOptionsAttribute.MaxDepth if the object graph is intentionally this deep.\");");
-            builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol, namingPolicy, "_context", defaultIgnoreCondition));
+            builder.AppendLine(SerializationCodeGenerator.GenerateSerializationCode(typeSymbol, namingPolicy, names, "_context", defaultIgnoreCondition));
             builder.AppendLine("        }");
             builder.AppendLine();
             builder.AppendLine($"        public override {typeName} Deserialize(CborReader reader, int depth = 0)");
             builder.AppendLine("        {");
             builder.AppendLine($"            if (depth >= {maxDepth}) throw new NCborDeserializationException(typeof({typeName}), \"Maximum deserialization depth ({maxDepth}) exceeded at depth \" + depth + \". The CBOR data may be malformed or unexpectedly deep; increase NCborSourceGenerationOptionsAttribute.MaxDepth if intentional.\");");
-            builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol, namingPolicy, "_context", defaultIgnoreCondition));
+            builder.AppendLine(SerializationCodeGenerator.GenerateDeserializationCode(typeSymbol, namingPolicy, names, "_context", defaultIgnoreCondition));
             builder.AppendLine("        }");
             builder.AppendLine("    }");
             builder.AppendLine();
@@ -468,8 +479,8 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         foreach (var typeSymbol in closure.StubTypes)
         {
             var typeName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var propertyName = GetPropertyNameFromType(typeSymbol);
-            var message = $"Type '{typeSymbol.ToDisplayString()}' is not supported by NCbor (see diagnostic CBOR009).";
+            var propertyName = names.Get(typeSymbol);
+            var message =$"Type '{typeSymbol.ToDisplayString()}' is not supported by NCbor (see diagnostic CBOR009).";
             var messageLiteral = "\"" + message.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
             builder.AppendLine($"    private sealed class {propertyName}TypeInfo : NCborTypeInfo<{typeName}>");
             builder.AppendLine("    {");
@@ -482,6 +493,16 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
 
         // Add nullable helper methods
         GenerateNullableHelpers(builder);
+
+        // Throwing helpers for unsupported types that have no stub TypeInfo (dynamic,
+        // List<dynamic>, ...), only when some reference site needs them. Like the stubs, they
+        // only exist so CBOR009 is the sole build error.
+        if (closure.Unsupported.Any(u => !SerializationCodeGenerator.CanEmitStub(u.Type)))
+        {
+            builder.AppendLine($"    private static void {SerializationCodeGenerator.UnsupportedWriteHelperName}(string typeName) => throw new NCborSerializationException(\"Type '\" + typeName + \"' is not supported by NCbor (see diagnostic CBOR009).\");");
+            builder.AppendLine($"    private static TValue {SerializationCodeGenerator.UnsupportedReadHelperName}<TValue>(string typeName) => throw new NCborDeserializationException(\"Type '\" + typeName + \"' is not supported by NCbor (see diagnostic CBOR009).\");");
+            builder.AppendLine();
+        }
 
         builder.AppendLine("}"); // close class
         foreach (var _ in containingTypes)
@@ -498,27 +519,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
 
     private static void GenerateNullableHelpers(StringBuilder builder)
     {
-        var primitiveTypes = new[]
-        {
-            ("Int32", "ReadInt32"),
-            ("Boolean", "ReadBoolean"),
-            ("String", "ReadTextString"),
-            ("Double", "ReadDouble"),
-            ("Single", "ReadSingle"),
-            ("Int64", "ReadInt64"),
-            ("UInt32", "ReadUInt32"),
-            ("UInt64", "ReadUInt64"),
-            ("Byte", "ReadUInt32"),
-            ("SByte", "ReadInt32"),
-            ("Int16", "ReadInt32"),
-            ("UInt16", "ReadUInt32"),
-            ("Decimal", "ReadDecimal"),
-            ("Guid", "ReadByteString"),
-            ("DateTime", "ReadTextString"),
-            ("DateTimeOffset", "ReadTextString")
-        };
-
-        foreach (var (typeName, readerMethod) in primitiveTypes)
+        foreach (var (typeName, readerMethod) in SerializationCodeGenerator.NullableHelpers)
         {
             var castPrefix = typeName switch
             {
@@ -529,7 +530,8 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
                 _ => ""
             };
 
-            builder.AppendLine($"    private static {typeName}? ReadNullable{typeName}(CborReader reader)");
+            // `System.`-qualified: the context's namespace may declare its own `Int32`, `Guid`, ...
+            builder.AppendLine($"    private static System.{typeName}? ReadNullable{typeName}(CborReader reader)");
             builder.AppendLine("    {");
             builder.AppendLine("        if (reader.PeekState() == CborReaderState.Null)");
             builder.AppendLine("        {");
@@ -574,14 +576,6 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         builder.AppendLine("    }");
         builder.AppendLine();
     }
-
-    private static string GetPropertyName(ITypeSymbol typeSymbol)
-    {
-        // Delegate to GetPropertyNameFromType for consistency
-        return GetPropertyNameFromType(typeSymbol);
-    }
-
-    private static string GetPropertyNameFromType(ITypeSymbol typeSymbol) => SerializationCodeGenerator.GetPropertyNameFromType(typeSymbol);
 
     private static bool IsBuiltInType(ITypeSymbol typeSymbol) => SerializationCodeGenerator.IsBuiltInType(typeSymbol);
 

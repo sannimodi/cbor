@@ -62,7 +62,7 @@ internal static partial class SerializationCodeGenerator
     /// <item>No usable constructor — throws; CBOR010 reports the problem at build time.</item>
     /// </list>
     /// </summary>
-    private static string GenerateObjectDeserialization(INamedTypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, NCborIgnoreCondition defaultIgnoreCondition)
+    private static string GenerateObjectDeserialization(INamedTypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, NCborIgnoreCondition defaultIgnoreCondition, ContextTypeNames names)
     {
         var builder = new StringBuilder();
         var resolution = ResolveConstructor(typeSymbol);
@@ -91,7 +91,7 @@ internal static partial class SerializationCodeGenerator
             {
                 var propertyName = GetPropertyName(property, namingPolicy);
                 builder.AppendLine($"        case \"{propertyName}\":");
-                builder.AppendLine($"            result.{property.Name} = {GeneratePropertyDeserialization(property)};");
+                builder.AppendLine($"            result.{property.Name} = {GeneratePropertyDeserialization(property, names)};");
                 builder.AppendLine("            break;");
             }
             builder.AppendLine("        default:");
@@ -143,7 +143,7 @@ internal static partial class SerializationCodeGenerator
         {
             var propertyName = GetPropertyName(property, namingPolicy);
             builder.AppendLine($"        case \"{propertyName}\":");
-            builder.AppendLine($"            __v_{property.Name} = {GeneratePropertyDeserialization(property)};");
+            builder.AppendLine($"            __v_{property.Name} = {GeneratePropertyDeserialization(property, names)};");
             if (IsConditionallyAssigned(property))
             {
                 builder.AppendLine($"            __h_{property.Name} = true;");
@@ -231,6 +231,9 @@ internal static partial class SerializationCodeGenerator
         for (var current = typeSymbol; current != null; current = current.BaseType)
         {
             if (current.SpecialType == SpecialType.System_Object || current.SpecialType == SpecialType.System_ValueType)
+                break;
+            // Framework base types (List<T>, Exception, Component, ...) contribute no members.
+            if (!SymbolEqualityComparer.Default.Equals(current, typeSymbol) && IsFrameworkMetadataType(current))
                 break;
             chain.Add(current);
         }

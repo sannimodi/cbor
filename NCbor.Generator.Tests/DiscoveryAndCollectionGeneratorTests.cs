@@ -4,8 +4,8 @@ namespace NCbor.Generator.Tests;
 
 /// <summary>
 /// Generator-level coverage for transitive type discovery, the collection-interface table,
-/// unsupported-type reporting (CBOR009), context-property name collisions (CBOR011), context
-/// property visibility, and registering built-in types directly on a context.
+/// unsupported-type reporting (CBOR009), disambiguation of colliding context-property names,
+/// context property visibility, and registering built-in types directly on a context.
 /// </summary>
 public class DiscoveryAndCollectionGeneratorTests
 {
@@ -260,8 +260,14 @@ public class DiscoveryAndCollectionGeneratorTests
     [InlineData("System.Collections.Generic.Queue<int>")]
     [InlineData("System.Collections.Generic.SortedSet<int>")]
     [InlineData("System.Collections.Generic.KeyValuePair<string, int>")]
-    [InlineData("Models.MyCollection")]
+    [InlineData("System.Collections.Generic.Stack<int>")]
+    [InlineData("System.Collections.Generic.LinkedList<int>")]
+    [InlineData("System.Collections.Concurrent.ConcurrentQueue<int>")]
     [InlineData("Models.StructPoco?")]
+    [InlineData("dynamic")]
+    [InlineData("System.Collections.Generic.List<dynamic>")]
+    [InlineData("dynamic[]")]
+    [InlineData("Models.Wrapper<dynamic>")]
     [InlineData("System.Collections.Generic.List<System.TimeSpan>")]
     [InlineData("System.Collections.Generic.Dictionary<string, object>")]
     public void UnsupportedPropertyType_ReportsCBOR009_WithNoCompilerErrors(string propertyType)
@@ -274,8 +280,8 @@ public class DiscoveryAndCollectionGeneratorTests
             {
                 public abstract class AbstractThing { public int X { get; set; } }
                 public interface IThing { int X { get; } }
-                public class MyCollection : List<int> { }
                 public struct StructPoco { public int X { get; set; } }
+                public class Wrapper<T> { public T Item { get; set; } = default!; }
 
                 public class Holder
                 {
@@ -374,12 +380,16 @@ public class DiscoveryAndCollectionGeneratorTests
         result.DiagnosticsWithId("CBOR009").Should().BeEmpty();
     }
 
-    // ---------- CBOR011: property name collisions ----------
+    // ---------- Context property name collisions (auto-disambiguated; CBOR011 is retired) ----------
 
     [Fact]
-    public void SameSimpleNameInTwoNamespaces_ReportsCBOR011_InsteadOfCS0102()
+    public void SameSimpleNameInTwoNamespaces_BothReferenced_AreDisambiguated_AndCompileCleanly()
     {
-        var result = GeneratorHarness.Run("""
+        // Both colliding types are reached through properties (and through List<T> / T[] element
+        // types), so every reference site has to use the disambiguated name. This used to report
+        // CBOR011, drop B.Item, and still reference it — CS1503/CS0029 on top of the error.
+        var result = GeneratorHarness.AssertCompilesCleanly("""
+            using System.Collections.Generic;
             using NCbor;
 
             namespace A { public class Item { public int X { get; set; } } }
@@ -387,42 +397,131 @@ public class DiscoveryAndCollectionGeneratorTests
 
             namespace Models
             {
-                public class Holder
+                public class Root
                 {
                     public A.Item First { get; set; } = new();
+                    public B.Item Second { get; set; } = new();
+                    public List<A.Item> FirstList { get; set; } = new();
+                    public List<B.Item> SecondList { get; set; } = new();
+                    public A.Item[] FirstArray { get; set; } = new A.Item[0];
+                    public B.Item[] SecondArray { get; set; } = new B.Item[0];
+                    public Dictionary<string, B.Item> SecondByKey { get; set; } = new();
                 }
 
-                [NCborSerializable(typeof(Holder))]
-                [NCborSerializable(typeof(B.Item))]
+                [NCborSerializable(typeof(Root))]
                 public partial class CollisionContext : NCborSerializerContext { }
             }
             """);
 
-        result.GeneratorException.Should().BeNull();
-        var cbor011 = result.DiagnosticsWithId("CBOR011");
-        cbor011.Should().ContainSingle(result.ToString());
-        cbor011[0].Severity.Should().Be(DiagnosticSeverity.Error);
-        cbor011[0].GetMessage().Should().Contain("'Item'").And.Contain("A.Item");
-        result.CompilationErrors.Should().NotContain(d => d.Id == "CS0102", result.ToString());
+        result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
+        result.GeneratedCodeWarnings.Should().BeEmpty(result.ToString());
+        var text = result.AllGeneratedText;
+        text.Should().Contain("NCborTypeInfo<global::A.Item> Item { get; }", "the first claimant keeps the simple name");
+        text.Should().Contain("NCborTypeInfo<global::B.Item> B_Item { get; }");
+        text.Should().Contain("NCborTypeInfo<global::System.Collections.Generic.List<global::B.Item>> ListOfB_Item { get; }");
+        text.Should().Contain("NCborTypeInfo<global::B.Item[]> ArrayOfB_Item { get; }");
+        text.Should().Contain("_context.B_Item.Serialize(writer, value.Second, depth + 1);");
+        text.Should().Contain("_context.B_Item.Deserialize(reader, depth + 1)");
+        text.Should().Contain("Type t when t == typeof(global::B.Item) => (NCborTypeInfo<T>)(object)B_Item,");
+        text.Should().Contain("private sealed class B_ItemTypeInfo : NCborTypeInfo<global::B.Item>");
     }
 
     [Fact]
-    public void TypeNamedDefault_ReportsCBOR011()
+    public void TypeNamedLikeAContextMember_IsDisambiguated_AndCompilesCleanly()
     {
-        var result = GeneratorHarness.Run("""
+        // `Default` (generated), `Equals` (inherited from object) and `Helper` (written by the
+        // user in the context's own partial declaration) are all taken.
+        var result = GeneratorHarness.AssertCompilesCleanly("""
             using NCbor;
 
             namespace Models
             {
                 public class Default { public int X { get; set; } }
+                public class Equals { public int Y { get; set; } }
+                public class Helper { public int Z { get; set; } }
 
                 [NCborSerializable(typeof(Default))]
-                public partial class ReservedContext : NCborSerializerContext { }
+                [NCborSerializable(typeof(Equals))]
+                [NCborSerializable(typeof(Helper))]
+                public partial class ReservedContext : NCborSerializerContext
+                {
+                    public int Helper() => 0;
+                }
             }
             """);
 
-        result.DiagnosticsWithId("CBOR011").Should().ContainSingle(result.ToString());
-        result.CompilationErrors.Should().NotContain(d => d.Id == "CS0102");
+        result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
+        result.GeneratedCodeWarnings.Should().BeEmpty(result.ToString());
+        var text = result.AllGeneratedText;
+        text.Should().Contain("NCborTypeInfo<global::Models.Default> Models_Default { get; }");
+        text.Should().Contain("NCborTypeInfo<global::Models.Equals> Models_Equals { get; }");
+        text.Should().Contain("NCborTypeInfo<global::Models.Helper> Models_Helper { get; }");
+    }
+
+    [Fact]
+    public void UserTypesNamedLikeGeneratedNames_AreDisambiguated_AndCompileCleanly()
+    {
+        // A user class `Int32` next to a registered int, and a user class `ListOfString` next to
+        // a List<string> property: same context property names, different types.
+        var result = GeneratorHarness.AssertCompilesCleanly("""
+            using System.Collections.Generic;
+            using NCbor;
+
+            namespace Models
+            {
+                public class Int32 { public int A { get; set; } }
+                public class ListOfString { public int B { get; set; } }
+
+                public class Holder
+                {
+                    public List<string> Names { get; set; } = new();
+                    public ListOfString Fake { get; set; } = new();
+                    public Int32 Custom { get; set; } = new();
+                }
+
+                [NCborSerializable(typeof(int))]
+                [NCborSerializable(typeof(Holder))]
+                public partial class LookalikeContext : NCborSerializerContext { }
+            }
+            """);
+
+        result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
+        var text = result.AllGeneratedText;
+        text.Should().Contain("NCborTypeInfo<int> Int32 { get; }");
+        text.Should().Contain("NCborTypeInfo<global::Models.Int32> Models_Int32 { get; }");
+        text.Should().Contain("NCborTypeInfo<global::System.Collections.Generic.List<string>> ListOfString { get; }");
+        text.Should().Contain("NCborTypeInfo<global::Models.ListOfString> Models_ListOfString { get; }");
+    }
+
+    [Fact]
+    public void TypesNestedInDifferentGenericInstantiations_AreDisambiguated_AndCompileCleanly()
+    {
+        var result = GeneratorHarness.AssertCompilesCleanly("""
+            using NCbor;
+
+            namespace Models
+            {
+                public class Outer<T>
+                {
+                    public class Inner { public T Value { get; set; } = default!; }
+                }
+
+                public class Holder
+                {
+                    public Outer<int>.Inner Ints { get; set; } = new();
+                    public Outer<string>.Inner Strings { get; set; } = new();
+                }
+
+                [NCborSerializable(typeof(Holder))]
+                public partial class NestedGenericContext : NCborSerializerContext { }
+            }
+            """);
+
+        result.GeneratorDiagnostics.Should().BeEmpty(result.ToString());
+        var text = result.AllGeneratedText;
+        text.Should().NotContain("InnerOf", "a type nested in a generic type has no type arguments of its own");
+        text.Should().Contain("NCborTypeInfo<global::Models.Outer<int>.Inner> Inner { get; }");
+        text.Should().Contain("NCborTypeInfo<global::Models.Outer<string>.Inner> OuterOfString_Inner { get; }");
     }
 
     // ---------- Visibility ----------

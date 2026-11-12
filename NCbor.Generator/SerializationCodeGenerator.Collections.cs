@@ -138,6 +138,14 @@ internal static partial class SerializationCodeGenerator
         if (type.TypeKind == TypeKind.Error)
             return TypeShape.Ignored;
 
+        // dynamic anywhere in the type (List<dynamic>, dynamic[], Foo<dynamic>): the TypeInfo
+        // would need typeof(...) over it, which is CS1962.
+        if (type.TypeKind != TypeKind.Dynamic && ContainsDynamic(type))
+        {
+            unsupportedReason = "dynamic has no fixed shape to generate code for, including as a type argument or array element";
+            return TypeShape.Unsupported;
+        }
+
         if (IsBuiltInType(type))
             return TypeShape.BuiltIn;
 
@@ -195,7 +203,11 @@ internal static partial class SerializationCodeGenerator
         if (type.IsAbstract && type.TypeKind == TypeKind.Class)
             return "abstract classes cannot be instantiated on deserialize (polymorphism is not supported)";
 
-        if (type.AllInterfaces.Any(i => i.SpecialType == SpecialType.System_Collections_IEnumerable))
+        // A framework collection outside the table (Queue, SortedSet, Stack, ConcurrentX, ...) is
+        // unsupported. A user type that happens to implement IEnumerable (`Bag : IEnumerable<int>`,
+        // `MyList : List<int>`) stays a plain object serialized by its properties, as before
+        // collections were recognized by interface; CBOR013 warns that its elements are dropped.
+        if (IsEnumerable(type) && IsFrameworkMetadataType(type))
             return "only List/IList/ICollection/IReadOnlyList/IReadOnlyCollection/IEnumerable, HashSet/ISet/IReadOnlySet and Dictionary/IDictionary/IReadOnlyDictionary collections are supported";
 
         if (type.DeclaringSyntaxReferences.IsEmpty && IsInSystemNamespace(type))
@@ -203,6 +215,43 @@ internal static partial class SerializationCodeGenerator
 
         return null;
     }
+
+    private static bool IsEnumerable(ITypeSymbol type) =>
+        type.AllInterfaces.Any(i => i.SpecialType == SpecialType.System_Collections_IEnumerable);
+
+    /// <summary>
+    /// CBOR013: a plain object (user type, so not in the collection table and not a framework
+    /// collection) that implements <c>IEnumerable</c>. It is serialized by its properties; its
+    /// elements are not.
+    /// </summary>
+    internal static bool IsEnumerablePlainObject(ITypeSymbol type) =>
+        ClassifyType(type, out _) == TypeShape.PlainObject && IsEnumerable(StripNullableAnnotation(type));
+
+    /// <summary>
+    /// True for a type that comes from metadata (not this compilation's source) and whose root
+    /// namespace is <c>System</c> or <c>Microsoft</c> — the BCL / framework. A type declared in
+    /// source, or in a non-framework referenced assembly, is a user type.
+    /// </summary>
+    internal static bool IsFrameworkMetadataType(ITypeSymbol type)
+    {
+        if (!type.OriginalDefinition.DeclaringSyntaxReferences.IsEmpty)
+            return false;
+
+        var ns = type.ContainingNamespace;
+        if (ns == null || ns.IsGlobalNamespace)
+            return false;
+        while (ns.ContainingNamespace != null && !ns.ContainingNamespace.IsGlobalNamespace)
+            ns = ns.ContainingNamespace;
+        return ns.Name is "System" or "Microsoft";
+    }
+
+    private static bool ContainsDynamic(ITypeSymbol type) => type switch
+    {
+        { TypeKind: TypeKind.Dynamic } => true,
+        IArrayTypeSymbol array => ContainsDynamic(array.ElementType),
+        INamedTypeSymbol named => named.TypeArguments.Any(ContainsDynamic) || (named.ContainingType != null && ContainsDynamic(named.ContainingType)),
+        _ => false,
+    };
 
     private static bool IsSystemTuple(ITypeSymbol type)
     {
@@ -231,11 +280,32 @@ internal static partial class SerializationCodeGenerator
         type = StripNullableAnnotation(type);
         return type.TypeKind is not (TypeKind.Error or TypeKind.Dynamic or TypeKind.Pointer or TypeKind.FunctionPointer or TypeKind.TypeParameter)
                && !type.IsRefLikeType
+               && !ContainsDynamic(type)
                && !(type is IArrayTypeSymbol array && !CanEmitStub(array.ElementType));
     }
 
     internal static bool IsUnsupportedStubbedType(ITypeSymbol type) =>
         ClassifyType(type, out _) == TypeShape.Unsupported && CanEmitStub(type);
+
+    /// <summary>
+    /// Unsupported (CBOR009) and without a stub TypeInfo (<c>dynamic</c>, <c>List&lt;dynamic&gt;</c>,
+    /// ...): reference sites call the context's throwing helpers instead (see
+    /// <see cref="GenerateUnsupportedWrite"/>), so CBOR009 stays the only build error.
+    /// </summary>
+    internal static bool IsUnsupportedUnstubbableType(ITypeSymbol type) =>
+        ClassifyType(type, out _) == TypeShape.Unsupported && !CanEmitStub(type);
+
+    /// <summary>
+    /// Statement that throws <c>NCborSerializationException</c> for an un-stubbable unsupported
+    /// value. A helper call rather than an inline <c>throw</c>, so the statements after it aren't
+    /// flagged as unreachable (CS0162).
+    /// </summary>
+    internal static string GenerateUnsupportedWrite(ITypeSymbol type) =>
+        $"{UnsupportedWriteHelperName}({ToStringLiteral(type.ToDisplayString())});";
+
+    /// <summary>Expression of type <paramref name="type"/> that throws <c>NCborDeserializationException</c>.</summary>
+    internal static string GenerateUnsupportedRead(ITypeSymbol type) =>
+        $"{UnsupportedReadHelperName}<{type.ToDisplayString()}>({ToStringLiteral(type.ToDisplayString())})";
 
     internal static ITypeSymbol StripNullableAnnotation(ITypeSymbol type) =>
         type.IsReferenceType && type.NullableAnnotation == NullableAnnotation.Annotated
@@ -264,10 +334,16 @@ internal static partial class SerializationCodeGenerator
     /// type. Reference-type elements write CBOR null for null <i>regardless of their nullable
     /// annotation</i>: <c>List&lt;Foo&gt;</c> and <c>List&lt;Foo?&gt;</c> are the same symbol under
     /// <see cref="SymbolEqualityComparer.Default"/> and therefore share one generated TypeInfo, so
-    /// the shared code must handle nulls for whichever declaration reaches it.
+    /// the shared code must handle nulls for whichever declaration reaches it — except for a
+    /// dictionary key (<paramref name="isDictionaryKey"/>), which is never null.
     /// </summary>
-    internal static string GenerateElementWrite(string expression, ITypeSymbol elementType, string contextRef)
+    internal static string GenerateElementWrite(string expression, ITypeSymbol elementType, string contextRef, ContextTypeNames names, bool isDictionaryKey = false)
     {
+        if (IsUnsupportedUnstubbableType(elementType))
+        {
+            return GenerateUnsupportedWrite(elementType);
+        }
+
         if (TryGetNullableUnderlyingType(elementType, out var underlying) && IsBuiltInType(underlying!))
         {
             return $"if ({expression}.HasValue) {{ {GenerateDirectSerialization($"{expression}.Value", underlying!)} }} else {{ writer.WriteNull(); }}";
@@ -275,9 +351,9 @@ internal static partial class SerializationCodeGenerator
 
         var core = IsBuiltInType(elementType)
             ? GenerateDirectSerialization(expression, elementType)
-            : $"{contextRef}.{GetPropertyNameFromType(elementType)}.Serialize(writer, {expression}, depth + 1);";
+            : $"{contextRef}.{names.Get(elementType)}.Serialize(writer, {expression}, depth + 1);";
 
-        if (elementType.IsReferenceType)
+        if (elementType.IsReferenceType && !isDictionaryKey)
         {
             return $"if ({expression} is null) {{ writer.WriteNull(); }} else {{ {core} }}";
         }
@@ -289,8 +365,13 @@ internal static partial class SerializationCodeGenerator
     /// Emits an expression reading one collection element / dictionary key / dictionary value.
     /// Mirrors <see cref="GenerateElementWrite"/>.
     /// </summary>
-    internal static string GenerateElementRead(ITypeSymbol elementType, string contextRef)
+    internal static string GenerateElementRead(ITypeSymbol elementType, string contextRef, ContextTypeNames names)
     {
+        if (IsUnsupportedUnstubbableType(elementType))
+        {
+            return GenerateUnsupportedRead(elementType);
+        }
+
         if (TryGetNullableUnderlyingType(elementType, out var underlying) && IsBuiltInType(underlying!))
         {
             if (underlying!.TypeKind == TypeKind.Enum)
@@ -302,7 +383,7 @@ internal static partial class SerializationCodeGenerator
 
         var core = IsBuiltInType(elementType)
             ? GenerateDirectDeserialization(elementType)
-            : $"{contextRef}.{GetPropertyNameFromType(elementType)}.Deserialize(reader, depth + 1)";
+            : $"{contextRef}.{names.Get(elementType)}.Deserialize(reader, depth + 1)";
 
         if (elementType.IsReferenceType)
         {

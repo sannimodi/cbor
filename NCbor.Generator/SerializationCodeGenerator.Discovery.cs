@@ -45,35 +45,39 @@ internal sealed class UnsupportedTypeUsage
     public string Reason { get; }
 }
 
-/// <summary>Two distinct types that map to the same context property name (CBOR011).</summary>
-internal sealed class PropertyNameCollision
+/// <summary>
+/// The context property name (also the stem of the <c>{Name}TypeInfo</c> class) of every type that
+/// gets one, assigned once per context by <see cref="SerializationCodeGenerator.DiscoverTypeClosure"/>.
+/// Every site that emits <c>_context.&lt;Name&gt;</c> or a TypeInfo class name looks the name up here,
+/// so a type whose simple name is taken (<c>A.Item</c> / <c>B.Item</c>) is referenced by the same
+/// disambiguated name everywhere.
+/// </summary>
+internal sealed class ContextTypeNames
 {
-    public PropertyNameCollision(ITypeSymbol type, string conflictsWith, string propertyName, TypeOrigin origin)
-    {
-        Type = type;
-        ConflictsWith = conflictsWith;
-        PropertyName = propertyName;
-        Origin = origin;
-    }
+    private readonly Dictionary<ITypeSymbol, string> _names;
 
-    public ITypeSymbol Type { get; }
+    public ContextTypeNames(Dictionary<ITypeSymbol, string> names) => _names = names;
 
-    /// <summary>Display name of the type (or context member) that already owns the name.</summary>
-    public string ConflictsWith { get; }
-
-    public string PropertyName { get; }
-    public TypeOrigin Origin { get; }
+    /// <summary>
+    /// The assigned name for <paramref name="type"/> (nullable annotations and tuple element names
+    /// ignored, as in discovery). Falls back to the simple name for a type discovery never saw
+    /// rather than throwing — a generator exception would drop every context's output.
+    /// </summary>
+    public string Get(ITypeSymbol type) =>
+        _names.TryGetValue(SerializationCodeGenerator.NormalizeForDiscovery(type), out var name)
+            ? name
+            : SerializationCodeGenerator.GetPropertyNameFromType(type);
 }
 
 /// <summary>Output of <see cref="SerializationCodeGenerator.DiscoverTypeClosure"/>.</summary>
 internal sealed class TypeClosure
 {
-    public TypeClosure(List<ITypeSymbol> types, List<ITypeSymbol> stubTypes, List<UnsupportedTypeUsage> unsupported, List<PropertyNameCollision> collisions)
+    public TypeClosure(List<ITypeSymbol> types, List<ITypeSymbol> stubTypes, List<UnsupportedTypeUsage> unsupported, ContextTypeNames names)
     {
         Types = types;
         StubTypes = stubTypes;
         Unsupported = unsupported;
-        Collisions = collisions;
+        Names = names;
     }
 
     /// <summary>
@@ -87,7 +91,9 @@ internal sealed class TypeClosure
     public List<ITypeSymbol> StubTypes { get; }
 
     public List<UnsupportedTypeUsage> Unsupported { get; }
-    public List<PropertyNameCollision> Collisions { get; }
+
+    /// <summary>Context property names for <see cref="Types"/> and <see cref="StubTypes"/>.</summary>
+    public ContextTypeNames Names { get; }
 }
 
 internal static partial class SerializationCodeGenerator
@@ -108,8 +114,9 @@ internal static partial class SerializationCodeGenerator
     internal static TypeClosure DiscoverTypeClosure(
         IEnumerable<RegisteredType> roots,
         NCborIgnoreCondition defaultIgnoreCondition,
-        string contextName)
+        INamedTypeSymbol contextType)
     {
+        var contextName = contextType.Name;
         var comparer = SymbolEqualityComparer.Default;
         var visited = new HashSet<ITypeSymbol>(comparer);
         var origins = new Dictionary<ITypeSymbol, TypeOrigin>(comparer);
@@ -122,7 +129,16 @@ internal static partial class SerializationCodeGenerator
         // GetTypeInfo<int>() works); discovered ones are written inline and need nothing.
         void Consider(ITypeSymbol rawType, TypeOrigin origin, bool isRoot)
         {
-            var type = Normalize(rawType);
+            var type = NormalizeForDiscovery(rawType);
+
+            // typeof(Wrapper<>) is legal in an attribute but names no type the generated code can
+            // reference: report it alone, with no stub and none of the per-type checks (CBOR010...).
+            if (IsOpenGenericType(type))
+            {
+                unsupported.Add(new UnsupportedTypeUsage(type, origin, $"open generic types cannot be registered (register a closed type, e.g. {type.Name}<int>)"));
+                return;
+            }
+
             var shape = ClassifyType(type, out var reason);
             switch (shape)
             {
@@ -184,64 +200,133 @@ internal static partial class SerializationCodeGenerator
                         // built-ins are written inline (Consider skips the latter).
                         if (GetConverterType(property) != null || IsByteArray(property.Type))
                             continue;
-                        var propertyOrigin = new TypeOrigin(property.Locations.FirstOrDefault(), $"{namedType.Name}.{property.Name}");
+                        // Named after the declaring type, not the type being walked: a base member
+                        // reached from several derived types then yields identical diagnostics,
+                        // which the generator de-duplicates (one CBOR009 per declaration).
+                        var propertyOrigin = new TypeOrigin(property.Locations.FirstOrDefault(), $"{property.ContainingType.Name}.{property.Name}");
                         Consider(property.Type, propertyOrigin, isRoot: false);
                     }
                     break;
             }
         }
 
-        var collisions = new List<PropertyNameCollision>();
-        var types = RemoveNameCollisions(ordered, stubs, origins, contextName, collisions, out var keptStubs);
-        return new TypeClosure(types, keptStubs, unsupported, collisions);
+        var names = AssignContextPropertyNames(ordered.Concat(stubs), GetReservedMemberNames(contextType));
+        return new TypeClosure(ordered, stubs, unsupported, names);
     }
 
     /// <summary>
-    /// Drops every type whose context property name (or <c>{Name}TypeInfo</c> class name) is
-    /// already taken — by an earlier type, or by a member the generator always emits — and
-    /// records a CBOR011 collision for it, so the user sees one clear error instead of CS0102.
+    /// Gives every type a context property name, deterministically: types are taken in closure
+    /// order (registered types in attribute order, then discovered types in BFS order, then
+    /// stubs). The first claimant of a name keeps the simple name (<c>Item</c>); a later one takes
+    /// the first free name from <see cref="GetNameCandidates"/> — qualified with one more
+    /// namespace / containing-type segment at a time (<c>B_Item</c>, <c>OuterOfString_Inner</c>,
+    /// <c>ListOfB_Item</c>) — with a numeric suffix as the last resort, so a collision is always
+    /// resolved. A name is free when neither it nor <c>{name}TypeInfo</c> is taken by an earlier
+    /// type or by a context member.
     /// </summary>
-    private static List<ITypeSymbol> RemoveNameCollisions(
-        List<ITypeSymbol> ordered,
-        List<ITypeSymbol> stubs,
-        Dictionary<ITypeSymbol, TypeOrigin> origins,
-        string contextName,
-        List<PropertyNameCollision> collisions,
-        out List<ITypeSymbol> keptStubs)
+    private static ContextTypeNames AssignContextPropertyNames(IEnumerable<ITypeSymbol> types, HashSet<string> reserved)
     {
-        // Member names the generated context already declares.
-        var owners = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["Default"] = $"the generated {contextName}.Default property",
-            ["GetTypeInfo"] = $"the generated {contextName}.GetTypeInfo<T>() method",
-            [contextName] = $"the context class {contextName} itself",
-        };
+        var taken = new HashSet<string>(reserved, StringComparer.Ordinal);
+        var names = new Dictionary<ITypeSymbol, string>(SymbolEqualityComparer.Default);
 
-        bool TryClaim(ITypeSymbol type)
-        {
-            var name = GetPropertyNameFromType(type);
-            var typeInfoName = name + "TypeInfo";
-            string? owner = null;
-            if (owners.TryGetValue(name, out var o1))
-                owner = o1;
-            else if (owners.TryGetValue(typeInfoName, out var o2))
-                owner = o2;
+        bool IsFree(string name) => !taken.Contains(name) && !taken.Contains(name + "TypeInfo");
 
-            if (owner != null)
+        foreach (var type in types)
+        {
+            string? chosen = null;
+            var last = "";
+            foreach (var candidate in GetNameCandidates(type))
             {
-                collisions.Add(new PropertyNameCollision(type, owner, name, origins[type]));
-                return false;
+                last = candidate;
+                if (IsFree(candidate))
+                {
+                    chosen = candidate;
+                    break;
+                }
             }
 
-            var display = type.ToDisplayString();
-            owners[name] = display;
-            owners[typeInfoName] = display;
-            return true;
+            for (var i = 2; chosen == null; i++)
+            {
+                var suffixed = last + "_" + i.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                if (IsFree(suffixed))
+                    chosen = suffixed;
+            }
+
+            taken.Add(chosen);
+            taken.Add(chosen + "TypeInfo");
+            names[type] = chosen;
         }
 
-        var kept = ordered.Where(TryClaim).ToList();
-        keptStubs = stubs.Where(TryClaim).ToList();
-        return kept;
+        return new ContextTypeNames(names);
+    }
+
+    /// <summary>
+    /// Names a generated context property must not take: members the generator always emits
+    /// (Default, GetTypeInfo, the nullable/throw helpers), the context's own name and type
+    /// parameters, and every member the context declares or inherits (members the user wrote in
+    /// another partial declaration, <c>object.Equals</c>, ...).
+    /// </summary>
+    private static HashSet<string> GetReservedMemberNames(INamedTypeSymbol contextType)
+    {
+        var reserved = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Default",
+            "GetTypeInfo",
+            "ReadNullValue",
+            "ReadNullEnum",
+            UnsupportedWriteHelperName,
+            UnsupportedReadHelperName,
+            contextType.Name,
+        };
+
+        foreach (var helperType in NullableHelperTypeNames)
+            reserved.Add("ReadNullable" + helperType);
+
+        foreach (var typeParameter in contextType.TypeParameters)
+            reserved.Add(typeParameter.Name);
+
+        for (var current = contextType; current != null; current = current.BaseType)
+        {
+            foreach (var memberName in current.MemberNames)
+                reserved.Add(memberName);
+        }
+
+        return reserved;
+    }
+
+    /// <summary>
+    /// Candidate context property names for <paramref name="type"/>, most readable first: the
+    /// simple name (<see cref="GetPropertyNameFromType"/>), then the name with every user type in
+    /// it qualified by 1, 2, ... of its nearest containing types / namespaces, then every
+    /// non-built-in component fully qualified (framework types included).
+    /// </summary>
+    private static IEnumerable<string> GetNameCandidates(ITypeSymbol type)
+    {
+        string? previous = null;
+        for (var level = 0; ; level++)
+        {
+            var candidate = BuildContextPropertyName(type, level, qualifyFramework: false);
+            // No component has a level-th container, so deeper levels can't differ either.
+            if (candidate == previous)
+                break;
+            yield return candidate;
+            previous = candidate;
+        }
+
+        var full = BuildContextPropertyName(type, int.MaxValue, qualifyFramework: true);
+        if (full != previous)
+            yield return full;
+    }
+
+    /// <summary><c>typeof(Wrapper&lt;&gt;)</c>, or a type nested in one (<c>typeof(Outer&lt;&gt;.Inner)</c>).</summary>
+    private static bool IsOpenGenericType(ITypeSymbol type)
+    {
+        for (var current = type as INamedTypeSymbol; current != null; current = current.ContainingType)
+        {
+            if (current.IsUnboundGenericType)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -250,7 +335,7 @@ internal static partial class SerializationCodeGenerator
     /// (<see cref="SymbolEqualityComparer.Default"/> already ignores nested nullable annotations,
     /// so <c>List&lt;string?&gt;</c> and <c>List&lt;string&gt;</c> also share one entry.)
     /// </summary>
-    private static ITypeSymbol Normalize(ITypeSymbol type)
+    internal static ITypeSymbol NormalizeForDiscovery(ITypeSymbol type)
     {
         type = StripNullableAnnotation(type);
         if (type is INamedTypeSymbol { IsTupleType: true, TupleUnderlyingType: { } underlying })

@@ -275,7 +275,7 @@ public class NCborSerializerOverloadTests
     [Fact]
     public async Task DeserializeAsync_EmptyStream_ThrowsNCborValidationException()
     {
-        var act = () => NCborSerializer.DeserializeAsync(new MemoryStream(), _context.SimpleModel);
+        var act = () => NCborSerializer.DeserializeAsync(new MemoryStream(), _context.SimpleModel).AsTask();
         await act.Should().ThrowAsync<NCborValidationException>().WithMessage("*CBOR data cannot be empty*");
     }
 
@@ -312,7 +312,7 @@ public class NCborSerializerOverloadTests
 
         var memory = Record.Exception(() => NCborSerializer.Deserialize(new ReadOnlyMemory<byte>(payload), _context.SimpleModel));
         var stream = Record.Exception(() => NCborSerializer.Deserialize(new MemoryStream(payload), _context.SimpleModel));
-        var asyncStream = await Record.ExceptionAsync(() => NCborSerializer.DeserializeAsync(new MemoryStream(payload), _context.SimpleModel));
+        var asyncStream = await Record.ExceptionAsync(() => NCborSerializer.DeserializeAsync(new MemoryStream(payload), _context.SimpleModel).AsTask());
 
         foreach (var ex in new[] { memory, stream, asyncStream })
         {
@@ -387,18 +387,18 @@ public class NCborSerializerOverloadTests
         var model = CreateSimple();
         var info = _context.SimpleModel;
 
-        ((Action)(() => NCborSerializer.Serialize((Stream)null!, model, info))).Should().Throw<ArgumentNullException>().WithParameterName("utf8Stream");
+        ((Action)(() => NCborSerializer.Serialize((Stream)null!, model, info))).Should().Throw<ArgumentNullException>().WithParameterName("stream");
         ((Action)(() => NCborSerializer.Serialize(new MemoryStream(), model, null!))).Should().Throw<ArgumentNullException>().WithParameterName("typeInfo");
         ((Action)(() => NCborSerializer.Serialize((IBufferWriter<byte>)null!, model, info))).Should().Throw<ArgumentNullException>().WithParameterName("writer");
         ((Action)(() => NCborSerializer.Serialize(new ArrayBufferWriter<byte>(), model, null!))).Should().Throw<ArgumentNullException>().WithParameterName("typeInfo");
         ((Action)(() => NCborSerializer.Deserialize(new ReadOnlyMemory<byte>(new byte[] { 0xA0 }), (NCborTypeInfo<SimpleModel>)null!))).Should().Throw<ArgumentNullException>().WithParameterName("typeInfo");
-        ((Action)(() => NCborSerializer.Deserialize((Stream)null!, info))).Should().Throw<ArgumentNullException>().WithParameterName("utf8Stream");
+        ((Action)(() => NCborSerializer.Deserialize((Stream)null!, info))).Should().Throw<ArgumentNullException>().WithParameterName("stream");
         ((Action)(() => NCborSerializer.Deserialize(new MemoryStream(), (NCborTypeInfo<SimpleModel>)null!))).Should().Throw<ArgumentNullException>().WithParameterName("typeInfo");
 
         // Async APIs validate arguments eagerly (before returning a Task), like System.Text.Json.
-        ((Action)(() => NCborSerializer.SerializeAsync((Stream)null!, model, info))).Should().Throw<ArgumentNullException>().WithParameterName("utf8Stream");
+        ((Action)(() => NCborSerializer.SerializeAsync((Stream)null!, model, info))).Should().Throw<ArgumentNullException>().WithParameterName("stream");
         ((Action)(() => NCborSerializer.SerializeAsync(new MemoryStream(), model, null!))).Should().Throw<ArgumentNullException>().WithParameterName("typeInfo");
-        ((Action)(() => NCborSerializer.DeserializeAsync((Stream)null!, info))).Should().Throw<ArgumentNullException>().WithParameterName("utf8Stream");
+        ((Action)(() => NCborSerializer.DeserializeAsync((Stream)null!, info))).Should().Throw<ArgumentNullException>().WithParameterName("stream");
         ((Action)(() => NCborSerializer.DeserializeAsync(new MemoryStream(), (NCborTypeInfo<SimpleModel>)null!))).Should().Throw<ArgumentNullException>().WithParameterName("typeInfo");
     }
 
@@ -426,7 +426,7 @@ public class NCborSerializerOverloadTests
         cts.Cancel();
         var bytes = NCborSerializer.Serialize(CreateSimple(), _context.SimpleModel);
 
-        var act = () => NCborSerializer.DeserializeAsync(new MemoryStream(bytes), _context.SimpleModel, cts.Token);
+        var act = () => NCborSerializer.DeserializeAsync(new MemoryStream(bytes), _context.SimpleModel, cts.Token).AsTask();
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
@@ -438,7 +438,7 @@ public class NCborSerializerOverloadTests
         var bytes = NCborSerializer.Serialize(CreateSimple(), _context.SimpleModel);
         var stream = new CancelOnReadStream(bytes, cts);
 
-        var act = () => NCborSerializer.DeserializeAsync(stream, _context.SimpleModel, cts.Token);
+        var act = () => NCborSerializer.DeserializeAsync(stream, _context.SimpleModel, cts.Token).AsTask();
 
         await act.Should().ThrowAsync<OperationCanceledException>();
         stream.ObservedToken.Should().Be(cts.Token, "the caller's token must flow through to the stream read");

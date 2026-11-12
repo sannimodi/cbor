@@ -62,19 +62,18 @@ public static class NCborSerializer
     }
 
     /// <summary>
-    /// Serializes the specified value as CBOR and writes it to <paramref name="utf8Stream"/>.
+    /// Serializes the specified value as CBOR and writes it to <paramref name="stream"/>.
     /// </summary>
     /// <typeparam name="T">The type of the value to serialize.</typeparam>
-    /// <param name="utf8Stream">The stream to write the encoded CBOR data to. (CBOR is a binary format; the
-    /// name mirrors <c>System.Text.Json.JsonSerializer</c>.) The stream is not flushed or closed.</param>
+    /// <param name="stream">The stream to write the encoded CBOR data to. The stream is not flushed or closed.</param>
     /// <param name="value">The value to serialize.</param>
     /// <param name="typeInfo">The type information for serialization.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NCborSerializationException">Thrown when serialization fails.</exception>
-    public static void Serialize<T>(Stream utf8Stream, T value, NCborTypeInfo<T> typeInfo)
+    public static void Serialize<T>(Stream stream, T value, NCborTypeInfo<T> typeInfo)
     {
-        if (utf8Stream == null)
-            throw new ArgumentNullException(nameof(utf8Stream));
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
         if (typeInfo == null)
             throw new ArgumentNullException(nameof(typeInfo));
 
@@ -83,42 +82,41 @@ public static class NCborSerializer
         try
         {
             int written = cborWriter.Encode(buffer);
-            utf8Stream.Write(buffer, 0, written);
+            stream.Write(buffer, 0, written);
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
         }
     }
 
     /// <summary>
-    /// Asynchronously serializes the specified value as CBOR and writes it to <paramref name="utf8Stream"/>.
+    /// Asynchronously serializes the specified value as CBOR and writes it to <paramref name="stream"/>.
     /// </summary>
     /// <typeparam name="T">The type of the value to serialize.</typeparam>
-    /// <param name="utf8Stream">The stream to write the encoded CBOR data to. (CBOR is a binary format; the
-    /// name mirrors <c>System.Text.Json.JsonSerializer</c>.) The stream is not flushed or closed.</param>
+    /// <param name="stream">The stream to write the encoded CBOR data to. The stream is not flushed or closed.</param>
     /// <param name="value">The value to serialize.</param>
     /// <param name="typeInfo">The type information for serialization.</param>
     /// <param name="cancellationToken">A token that may be used to cancel the write operation.</param>
     /// <returns>A task that represents the asynchronous write operation.</returns>
     /// <remarks>
     /// Encoding is performed synchronously into a pooled buffer (the underlying <see cref="CborWriter"/> is not
-    /// streaming); only the write to <paramref name="utf8Stream"/> is asynchronous.
+    /// streaming); only the write to <paramref name="stream"/> is asynchronous.
     /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NCborSerializationException">Thrown when serialization fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is canceled.</exception>
-    public static Task SerializeAsync<T>(Stream utf8Stream, T value, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
+    public static Task SerializeAsync<T>(Stream stream, T value, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
     {
-        if (utf8Stream == null)
-            throw new ArgumentNullException(nameof(utf8Stream));
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
         if (typeInfo == null)
             throw new ArgumentNullException(nameof(typeInfo));
 
-        return SerializeAsyncCore(utf8Stream, value, typeInfo, cancellationToken);
+        return SerializeAsyncCore(stream, value, typeInfo, cancellationToken);
     }
 
-    private static async Task SerializeAsyncCore<T>(Stream utf8Stream, T value, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken)
+    private static async Task SerializeAsyncCore<T>(Stream stream, T value, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -127,11 +125,11 @@ public static class NCborSerializer
         try
         {
             int written = cborWriter.Encode(buffer);
-            await utf8Stream.WriteAsync(buffer, 0, written, cancellationToken).ConfigureAwait(false);
+            await stream.WriteAsync(buffer, 0, written, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
         }
     }
 
@@ -178,11 +176,11 @@ public static class NCborSerializer
     }
 
     /// <summary>
-    /// Deserializes a value from CBOR data read from <paramref name="utf8Stream"/>.
+    /// Deserializes a value from CBOR data read from <paramref name="stream"/>.
     /// </summary>
     /// <typeparam name="T">The type of the value to deserialize.</typeparam>
-    /// <param name="utf8Stream">The stream to read from, starting at its current position. (CBOR is a binary
-    /// format; the name mirrors <c>System.Text.Json.JsonSerializer</c>.) The stream is not closed.</param>
+    /// <param name="stream">The stream to read from, starting at its current position. The
+    /// stream is read to its end and is not closed.</param>
     /// <param name="typeInfo">The type information for deserialization.</param>
     /// <returns>The deserialized value.</returns>
     /// <remarks>
@@ -190,55 +188,55 @@ public static class NCborSerializer
     /// <see cref="CborReader"/> is not a streaming reader. This overload therefore does not reduce peak memory
     /// use compared to reading the stream into a <see cref="T:byte[]"/> yourself; it is a convenience.
     /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NCborValidationException">Thrown when the stream contains no data or CBOR data validation fails.</exception>
     /// <exception cref="NCborDeserializationException">Thrown when deserialization fails.</exception>
-    public static T Deserialize<T>(Stream utf8Stream, NCborTypeInfo<T> typeInfo)
+    public static T Deserialize<T>(Stream stream, NCborTypeInfo<T> typeInfo)
     {
-        if (utf8Stream == null)
-            throw new ArgumentNullException(nameof(utf8Stream));
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
         if (typeInfo == null)
             throw new ArgumentNullException(nameof(typeInfo));
 
-        using var buffer = CreateReadBuffer(utf8Stream);
-        utf8Stream.CopyTo(buffer, StreamCopyBufferSize);
+        using var buffer = CreateReadBuffer(stream);
+        stream.CopyTo(buffer, StreamCopyBufferSize);
         return ReadValue(AsMemory(buffer), typeInfo);
     }
 
     /// <summary>
-    /// Asynchronously deserializes a value from CBOR data read from <paramref name="utf8Stream"/>.
+    /// Asynchronously deserializes a value from CBOR data read from <paramref name="stream"/>.
     /// </summary>
     /// <typeparam name="T">The type of the value to deserialize.</typeparam>
-    /// <param name="utf8Stream">The stream to read from, starting at its current position. (CBOR is a binary
-    /// format; the name mirrors <c>System.Text.Json.JsonSerializer</c>.) The stream is not closed.</param>
+    /// <param name="stream">The stream to read from, starting at its current position. The
+    /// stream is read to its end and is not closed.</param>
     /// <param name="typeInfo">The type information for deserialization.</param>
     /// <param name="cancellationToken">A token that may be used to cancel the read operation.</param>
-    /// <returns>A task whose result is the deserialized value.</returns>
+    /// <returns>A value task whose result is the deserialized value.</returns>
     /// <remarks>
     /// The stream is read asynchronously to its end into an in-memory buffer, then decoded synchronously,
     /// because the underlying <see cref="CborReader"/> is not a streaming reader. Only the I/O is asynchronous
     /// and cancelable; peak memory use is the full size of the payload.
     /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="utf8Stream"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="stream"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NCborValidationException">Thrown when the stream contains no data or CBOR data validation fails.</exception>
     /// <exception cref="NCborDeserializationException">Thrown when deserialization fails.</exception>
     /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is canceled.</exception>
-    public static Task<T> DeserializeAsync<T>(Stream utf8Stream, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
+    public static ValueTask<T> DeserializeAsync<T>(Stream stream, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
     {
-        if (utf8Stream == null)
-            throw new ArgumentNullException(nameof(utf8Stream));
+        if (stream == null)
+            throw new ArgumentNullException(nameof(stream));
         if (typeInfo == null)
             throw new ArgumentNullException(nameof(typeInfo));
 
-        return DeserializeAsyncCore(utf8Stream, typeInfo, cancellationToken);
+        return new ValueTask<T>(DeserializeAsyncCore(stream, typeInfo, cancellationToken));
     }
 
-    private static async Task<T> DeserializeAsyncCore<T>(Stream utf8Stream, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken)
+    private static async Task<T> DeserializeAsyncCore<T>(Stream stream, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var buffer = CreateReadBuffer(utf8Stream);
-        await utf8Stream.CopyToAsync(buffer, StreamCopyBufferSize, cancellationToken).ConfigureAwait(false);
+        using var buffer = CreateReadBuffer(stream);
+        await stream.CopyToAsync(buffer, StreamCopyBufferSize, cancellationToken).ConfigureAwait(false);
         return ReadValue(AsMemory(buffer), typeInfo);
     }
 
@@ -291,7 +289,15 @@ public static class NCborSerializer
         try
         {
             var reader = new CborReader(data);
-            return typeInfo.Deserialize(reader);
+            var result = typeInfo.Deserialize(reader);
+            if (reader.BytesRemaining > 0)
+            {
+                // Matches System.Text.Json: a payload must contain exactly one top-level value. Silently
+                // ignoring trailing bytes would hide truncated/concatenated documents and garbage input.
+                throw new NCborValidationException(
+                    $"Invalid CBOR data for type {typeof(T).Name}: {reader.BytesRemaining} unexpected trailing byte(s) after the top-level value.");
+            }
+            return result;
         }
         catch (NCborDeserializationException)
         {

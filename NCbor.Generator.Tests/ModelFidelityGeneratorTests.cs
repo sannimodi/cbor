@@ -218,7 +218,9 @@ public class ModelFidelityGeneratorTests
     public void FastPath_PlainSettablePoco_DeserializeBodyIsUnchanged()
     {
         // Pins the historical new-then-set output so the general construction path can't leak
-        // into plain POCOs (and change generated code for every existing user).
+        // into plain POCOs (and change generated code for every existing user). The one deliberate
+        // change since: reference-type properties read CBOR null back as null (System.Text.Json
+        // parity), so `Name` carries the null check.
         var result = GeneratorHarness.AssertCompilesCleanly(Wrap("""
             public class Simple { public int Id { get; set; } public string Name { get; set; } = ""; }
             """, "[NCborSerializable(typeof(Simple))]"));
@@ -235,7 +237,7 @@ public class ModelFidelityGeneratorTests
                         result.Id = reader.ReadInt32();
                         break;
                     case "Name":
-                        result.Name = reader.ReadTextString();
+                        result.Name = (reader.PeekState() == CborReaderState.Null ? ReadNullValue<string>(reader)! : reader.ReadTextString());
                         break;
                     default:
                         reader.SkipValue();

@@ -209,6 +209,15 @@ internal static partial class SerializationCodeGenerator
     }
 
     /// <summary>
+    /// The second <c>[NCborConstructor]</c>-marked constructor (declaration order), or null when
+    /// fewer than two are marked — where CBOR007 is reported.
+    /// </summary>
+    public static IMethodSymbol? GetFirstRedundantMarkedConstructor(INamedTypeSymbol typeSymbol)
+    {
+        return GetConstructorCandidates(typeSymbol).Skip(1).FirstOrDefault();
+    }
+
+    /// <summary>
     /// Only "plain object" types go through property-based dispatch at all; collections, byte[],
     /// and built-ins are serialized by iterating elements/values, so checks scoped to "properties
     /// the codegen loop will actually see" must exclude these or they misfire on the type's own
@@ -500,12 +509,14 @@ internal static partial class SerializationCodeGenerator
     private static string GeneratePropertySerialization(IPropertySymbol property)
     {
         var type = property.Type;
+        var access = $"value.{property.Name}";
 
-        // A custom converter takes priority over every other dispatch rule.
+        // A custom converter takes priority over every other dispatch rule, null handling
+        // included: the converter receives the value as-is and decides how to encode null.
         var converterType = GetConverterType(property);
         if (converterType != null)
         {
-            return $"{GetConverterFieldName(converterType)}.Write(writer, value.{property.Name});";
+            return $"{GetConverterFieldName(converterType)}.Write(writer, {access}!);";
         }
 
         // Unsupported types (CBOR009) dispatch to their throwing stub TypeInfo by their exact
@@ -513,7 +524,7 @@ internal static partial class SerializationCodeGenerator
         // ReadNullValue<T> for a Nullable<struct>), so the only build error is CBOR009 itself.
         if (IsUnsupportedStubbedType(type))
         {
-            return $"_context.{GetPropertyNameFromType(StripNullableAnnotation(type))}.Serialize(writer, value.{property.Name}, depth + 1);";
+            return $"_context.{GetPropertyNameFromType(StripNullableAnnotation(type))}.Serialize(writer, {access}!, depth + 1);";
         }
 
         // [NCborEnumAsString] takes priority over the default numeric enum encoding.
@@ -521,68 +532,51 @@ internal static partial class SerializationCodeGenerator
         {
             if (type.TypeKind == TypeKind.Enum)
             {
-                return $"writer.WriteTextString(value.{property.Name}.ToString());";
+                return $"writer.WriteTextString({access}.ToString());";
             }
             if (TryGetNullableEnumUnderlyingType(type, out _))
             {
-                return $"if (value.{property.Name}.HasValue) {{ writer.WriteTextString(value.{property.Name}.Value.ToString()); }} else {{ writer.WriteNull(); }}";
+                return $"if ({access}.HasValue) {{ writer.WriteTextString({access}.Value.ToString()); }} else {{ writer.WriteNull(); }}";
             }
         }
 
-        // Handle byte[] / byte[]? as CBOR byte string (major type 2)
+        // Nullable<built-in>: the value or CBOR null.
+        if (TryGetNullableUnderlyingType(type, out var underlyingType) && IsBuiltInType(underlyingType!))
+        {
+            return $"if ({access}.HasValue) {{ {GenerateDirectSerialization($"{access}.Value", underlyingType!)} }} else {{ writer.WriteNull(); }}";
+        }
+
+        var core = GenerateNonNullPropertyWrite(access, StripNullableAnnotation(type));
+
+        // Matches System.Text.Json: a null reference-type property is written as CBOR null
+        // whatever its nullable annotation says — a non-annotated `string` can still be null at
+        // runtime, and passing it on would crash (WriteTextString throws ArgumentNullException,
+        // a nested TypeInfo dereferences it). Flow analysis sees the null check, so the core
+        // call needs no `!`.
+        if (type.IsReferenceType)
+        {
+            return $"if ({access} is null) {{ writer.WriteNull(); }} else {{ {core} }}";
+        }
+
+        return core;
+    }
+
+    /// <summary>Statement writing a property value already known to be non-null.</summary>
+    private static string GenerateNonNullPropertyWrite(string access, ITypeSymbol type)
+    {
+        // byte[] as a CBOR byte string (major type 2)
         if (IsByteArray(type))
         {
-            if (type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
-            {
-                return $"if (value.{property.Name} != null) {{ {GenerateByteStringWrite($"value.{property.Name}")} }} else {{ writer.WriteNull(); }}";
-            }
-            return GenerateByteStringWrite($"value.{property.Name}");
+            return GenerateByteStringWrite(access);
         }
 
-        // Handle built-in types directly
         if (IsBuiltInType(type))
         {
-            return GenerateDirectSerialization($"value.{property.Name}", type);
-        }
-        
-        // Handle arrays (including nullable arrays)
-        if (IsArray(type, out var arrayElementType))
-        {
-            if (arrayElementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid array type.");
-                
-            return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name}, depth + 1);";
+            return GenerateDirectSerialization(access, type);
         }
 
-        // Handle nullable arrays
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&
-            IsArray(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated), out var nullableArrayElementType))
-        {
-            if (nullableArrayElementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid nullable array type.");
-
-            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}, depth + 1); }} else {{ writer.WriteNull(); }}";
-        }
-        
-        // Handle nullable built-in types
-        if (type is INamedTypeSymbol namedType && namedType.IsGenericType && 
-            namedType.Name == "Nullable" && namedType.TypeArguments.Length == 1)
-        {
-            var underlyingType = namedType.TypeArguments[0];
-            if (IsBuiltInType(underlyingType))
-            {
-                return $"if (value.{property.Name}.HasValue) {{ {GenerateDirectSerialization($"value.{property.Name}.Value", underlyingType)} }} else {{ writer.WriteNull(); }}";
-            }
-        }
-        
-        // Handle nullable reference types (like Dictionary<string, string>?)
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
-        {
-            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}, depth + 1); }} else {{ writer.WriteNull(); }}";
-        }
-
-        // Handle complex types via context reference
-        return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name}, depth + 1);";
+        // Arrays, collections and plain objects go through the context property for their type.
+        return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, {access}, depth + 1);";
     }
 
     private static string GeneratePropertyDeserialization(IPropertySymbol property)
@@ -617,67 +611,45 @@ internal static partial class SerializationCodeGenerator
             }
         }
 
-        // Handle byte[] / byte[]? as CBOR byte string (major type 2)
+        // Nullable<built-in>
+        if (TryGetNullableUnderlyingType(type, out var underlyingType) && IsBuiltInType(underlyingType!))
+        {
+            // For enums, use inline null checking instead of helper methods
+            if (underlyingType!.TypeKind == TypeKind.Enum)
+            {
+                var enumDeserialization = GenerateDirectDeserialization(underlyingType);
+                return $"reader.PeekState() == CborReaderState.Null ? ReadNullEnum<{underlyingType.ToDisplayString()}>(reader) : {enumDeserialization}";
+            }
+            return $"ReadNullable{underlyingType.Name}(reader)";
+        }
+
+        var nonNullableType = StripNullableAnnotation(type);
+        var core = GenerateNonNullPropertyRead(nonNullableType);
+
+        // Mirrors GeneratePropertySerialization: CBOR null reads back as null for every
+        // reference-type property. `!` because the target may be declared non-nullable — a null
+        // on the wire was written from a null value, so it round-trips (as in System.Text.Json).
+        if (type.IsReferenceType)
+        {
+            return $"(reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader)! : {core})";
+        }
+
+        return core;
+    }
+
+    /// <summary>Expression reading a non-null property value.</summary>
+    private static string GenerateNonNullPropertyRead(ITypeSymbol type)
+    {
         if (IsByteArray(type))
         {
-            if (type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
-            {
-                return "reader.PeekState() == CborReaderState.Null ? ReadNullValue<byte[]>(reader) : reader.ReadByteString()";
-            }
             return "reader.ReadByteString()";
         }
 
-        // Handle built-in types directly
         if (IsBuiltInType(type))
         {
             return GenerateDirectDeserialization(type);
         }
-        
-        // Handle arrays (including nullable arrays)
-        if (IsArray(type, out var arrayElementType))
-        {
-            if (arrayElementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid array type.");
-                
-            return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader, depth + 1)";
-        }
 
-        // Handle nullable arrays
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&
-            IsArray(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated), out var nullableArrayElementType))
-        {
-            if (nullableArrayElementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid nullable array type.");
-
-            var nonNullableType = type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated);
-            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader, depth + 1)";
-        }
-        
-        // Handle nullable built-in types
-        if (type is INamedTypeSymbol namedType && namedType.IsGenericType && 
-            namedType.Name == "Nullable" && namedType.TypeArguments.Length == 1)
-        {
-            var underlyingType = namedType.TypeArguments[0];
-            if (IsBuiltInType(underlyingType))
-            {
-                // For enums, use inline null checking instead of helper methods
-                if (underlyingType.TypeKind == TypeKind.Enum)
-                {
-                    var enumDeserialization = GenerateDirectDeserialization(underlyingType);
-                    return $"reader.PeekState() == CborReaderState.Null ? ReadNullEnum<{underlyingType.ToDisplayString()}>(reader) : {enumDeserialization}";
-                }
-                return $"ReadNullable{underlyingType.Name}(reader)";
-            }
-        }
-        
-        // Handle nullable reference types (like Dictionary<string, string>?)
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
-        {
-            var nonNullableType = type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated);
-            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader, depth + 1)";
-        }
-
-        // Handle complex types via context reference
         return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader, depth + 1)";
     }
 

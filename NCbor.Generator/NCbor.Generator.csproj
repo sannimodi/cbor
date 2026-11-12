@@ -30,6 +30,11 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<!-- Lets the generator tests unit-test internal helpers (e.g. EquatableArray<T>) directly. -->
+		<InternalsVisibleTo Include="NCbor.Generator.Tests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
 		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" PrivateAssets="all" />
 	</ItemGroup>

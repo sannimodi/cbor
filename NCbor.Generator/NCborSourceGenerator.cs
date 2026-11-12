@@ -43,6 +43,11 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         "CBOR010", "NCbor Generator",
         "Type '{0}' cannot be deserialized: {1}. Add an accessible parameterless constructor, a single constructor whose parameters all match properties by name and type, or mark one constructor [NCborConstructor].",
         "Usage", DiagnosticSeverity.Error, true);
+
+    private static readonly DiagnosticDescriptor NonPartialContainingType = new DiagnosticDescriptor(
+        "CBOR012", "NCbor Generator",
+        "Context '{0}' is nested in '{1}', which is not declared partial. NCbor generates the context's members inside its containing types, so every containing type must be partial.",
+        "Usage", DiagnosticSeverity.Error, true);
 #pragma warning restore RS2008, RS1032
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -61,9 +66,22 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             .Select(static (model, _) => model!)
             .WithTrackingName(TrackingNames.ContextModels);
 
-        context.RegisterSourceOutput(
-            contexts.Select(static (model, _) => (model.HintName, model.Source)).WithTrackingName(TrackingNames.GeneratedSource),
-            static (spc, output) => spc.AddSource(output.HintName, SourceText.From(output.Source, Encoding.UTF8)));
+        // Hint names are made unique across *all* contexts here, after Collect(): the transform
+        // sees one context at a time, and Roslyn compares hint names case-insensitively, so two
+        // contexts whose names differ only by case (or that sanitize to the same text) can only
+        // be told apart with the full set in view. A duplicate would make AddSource throw, which
+        // drops the output of every context (CS8785). The per-context Select stays tracked and
+        // cached; only the cheap AddSource loop re-runs.
+        var files = contexts
+            .Where(static model => model.Source is not null)
+            .Select(static (model, _) => (model.HintName, model.DisambiguatedHintName, Source: model.Source!))
+            .WithTrackingName(TrackingNames.GeneratedSource);
+
+        context.RegisterSourceOutput(files.Collect(), static (spc, all) =>
+        {
+            foreach (var (hintName, source) in AssignUniqueHintNames(all))
+                spc.AddSource(hintName, SourceText.From(source, Encoding.UTF8));
+        });
 
         // Diagnostics are reported from a separate node joined with the compilation so they can be
         // rehydrated against the real SyntaxTree. A path-only Location.Create(...) location has no
@@ -150,9 +168,10 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             // Error: more than one [NCborConstructor] on the same type is ambiguous — the
             // generator has no principled way to pick the "right" one, so this must be an
             // error rather than a silently-arbitrary choice.
-            if (SerializationCodeGenerator.HasAmbiguousConstructors(registeredType))
+            // Reported once, on the second marked constructor (the first one that makes it ambiguous).
+            if (SerializationCodeGenerator.GetFirstRedundantMarkedConstructor(registeredType) is { } redundantConstructor)
             {
-                diagnostics.Add(DiagnosticInfo.Create(AmbiguousConstructors, null, registeredType.Name));
+                diagnostics.Add(DiagnosticInfo.Create(AmbiguousConstructors, redundantConstructor.Locations.FirstOrDefault(), registeredType.Name));
             }
 
             // Error: no constructor the generated Deserialize can call (see SerializationCodeGenerator.ResolveConstructor).
@@ -169,9 +188,21 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var source = GenerateContextSource(typeSymbol, closure);
+        // A nested context is emitted inside `partial` re-declarations of its containing types,
+        // which is only possible when every one of them is partial.
+        string? source = null;
+        var nonPartialContainer = GetContainingTypes(typeSymbol).FirstOrDefault(t => !IsDeclaredPartial(t));
+        if (nonPartialContainer != null)
+        {
+            diagnostics.Add(DiagnosticInfo.Create(NonPartialContainingType, typeSymbol.Locations.FirstOrDefault(), typeSymbol.ToDisplayString(), nonPartialContainer.ToDisplayString()));
+        }
+        else
+        {
+            source = GenerateContextSource(typeSymbol, closure);
+        }
 
-        return new ContextModel(GetHintName(typeSymbol), source, new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+        var (hintName, disambiguatedHintName) = GetHintNames(typeSymbol);
+        return new ContextModel(hintName, disambiguatedHintName, source, new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
     }
 
     /// <summary>The <c>typeof(T)</c> argument of each <c>[NCborSerializable]</c>, in declaration order.</summary>
@@ -186,27 +217,128 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Fully qualified hint name (e.g. <c>MyApp.Serialization.MyContext.g.cs</c>; nested types are
-    /// joined with '.') so same-named contexts in different namespaces or containing types don't
-    /// collide. Characters outside [A-Za-z0-9_.] (generic brackets, etc.) become '_'.
+    /// Hint names for a context. The readable one is the fully qualified name (e.g.
+    /// <c>MyApp.Serialization.MyContext.g.cs</c>; containing types are joined with '.'), with
+    /// characters outside [A-Za-z0-9_.] (generic brackets, etc.) turned into '_'. Because that
+    /// replacement is lossy (<c>Ctx&lt;T&gt;</c> and <c>Ctx_T_</c> would both become
+    /// <c>Ctx_T_</c>), a lossy name also gets a short stable hash of the fully qualified name. The
+    /// disambiguated name always carries that hash; <see cref="AssignUniqueHintNames"/> falls back
+    /// to it when readable names still collide (e.g. <c>Ctx</c> vs <c>CTX</c>: Roslyn compares
+    /// hint names case-insensitively).
     /// </summary>
-    private static string GetHintName(INamedTypeSymbol typeSymbol)
+    private static (string HintName, string DisambiguatedHintName) GetHintNames(INamedTypeSymbol typeSymbol)
     {
         var fullName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         const string globalPrefix = "global::";
         if (fullName.StartsWith(globalPrefix, StringComparison.Ordinal))
             fullName = fullName.Substring(globalPrefix.Length);
 
-        var builder = new StringBuilder(fullName.Length + 5);
+        var builder = new StringBuilder(fullName.Length + 16);
+        var lossy = false;
         foreach (var ch in fullName)
         {
             var valid = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.';
             builder.Append(valid ? ch : '_');
+            lossy |= !valid;
         }
 
-        builder.Append(".g.cs");
-        return builder.ToString();
+        var readable = builder.ToString();
+        var hashed = readable + "." + StableHash(fullName);
+        return ((lossy ? hashed : readable) + ".g.cs", hashed + ".g.cs");
     }
+
+    /// <summary>
+    /// FNV-1a over the UTF-16 code units, as 8 hex digits. Unlike <see cref="string.GetHashCode()"/>
+    /// it is the same in every process, so hint names (and generated file paths) are stable.
+    /// </summary>
+    private static string StableHash(string text)
+    {
+        unchecked
+        {
+            var hash = 2166136261u;
+            foreach (var ch in text)
+            {
+                hash = (hash ^ ch) * 16777619u;
+            }
+            return hash.ToString("X8", System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>
+    /// Picks one hint name per generated file such that no two are equal ignoring case (which is
+    /// how Roslyn compares them). Every member of a group whose readable names collide switches to
+    /// its disambiguated (hashed) name, so the outcome doesn't depend on which context came first.
+    /// A numeric suffix is the last resort for a collision that survives that (only possible
+    /// with a hash collision or a type literally named like another's hashed name).
+    /// </summary>
+    internal static IEnumerable<(string HintName, string Source)> AssignUniqueHintNames(ImmutableArray<(string HintName, string DisambiguatedHintName, string Source)> files)
+    {
+        var readableCounts = files
+            .GroupBy(f => f.HintName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ordered = files
+            .Select(f => (Name: readableCounts[f.HintName] > 1 ? f.DisambiguatedHintName : f.HintName, f.Source))
+            .OrderBy(f => f.Name, StringComparer.Ordinal);
+
+        foreach (var (name, source) in ordered)
+        {
+            var unique = name;
+            for (var i = 2; !used.Add(unique); i++)
+                unique = name.Substring(0, name.Length - ".g.cs".Length) + "." + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".g.cs";
+            yield return (unique, source);
+        }
+    }
+
+    /// <summary>Containing types of <paramref name="typeSymbol"/>, outermost first.</summary>
+    private static List<INamedTypeSymbol> GetContainingTypes(INamedTypeSymbol typeSymbol)
+    {
+        var containers = new List<INamedTypeSymbol>();
+        for (var current = typeSymbol.ContainingType; current != null; current = current.ContainingType)
+            containers.Add(current);
+        containers.Reverse();
+        return containers;
+    }
+
+    private static bool IsDeclaredPartial(INamedTypeSymbol typeSymbol) =>
+        typeSymbol.DeclaringSyntaxReferences.Any(r =>
+            r.GetSyntax() is TypeDeclarationSyntax declaration && declaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)));
+
+    /// <summary>
+    /// <c>class Outer</c>, <c>record struct Outer&lt;T&gt;</c>, ... — the keyword and name (with
+    /// type parameters) of a partial re-declaration. Modifiers, constraints and base lists are
+    /// left out: each partial part may omit them and they're taken from the user's declaration.
+    /// </summary>
+    private static string GetPartialDeclarationHead(INamedTypeSymbol typeSymbol)
+    {
+        var keyword = typeSymbol.IsRecord
+            ? (typeSymbol.TypeKind == TypeKind.Struct ? "record struct" : "record")
+            : typeSymbol.TypeKind switch
+            {
+                TypeKind.Struct => "struct",
+                TypeKind.Interface => "interface",
+                _ => "class",
+            };
+        return $"{keyword} {GetNameWithTypeParameters(typeSymbol)}";
+    }
+
+    private static string GetNameWithTypeParameters(INamedTypeSymbol typeSymbol) =>
+        typeSymbol.TypeParameters.Length == 0
+            ? typeSymbol.Name
+            : $"{typeSymbol.Name}<{string.Join(", ", typeSymbol.TypeParameters.Select(p => p.Name))}>";
+
+    /// <summary>The context's declared accessibility, so an internal/private context stays that way.</summary>
+    private static string GetAccessibilityKeyword(Accessibility accessibility) => accessibility switch
+    {
+        Accessibility.Public => "public ",
+        Accessibility.Internal => "internal ",
+        Accessibility.Private => "private ",
+        Accessibility.Protected => "protected ",
+        Accessibility.ProtectedOrInternal => "protected internal ",
+        Accessibility.ProtectedAndInternal => "private protected ",
+        _ => "",
+    };
 
     private static string GenerateContextSource(INamedTypeSymbol contextType, TypeClosure closure)
     {
@@ -238,12 +370,22 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             builder.AppendLine("{");
         }
 
-        // Add partial class declaration
-        builder.AppendLine($"public partial class {contextType.Name}");
+        // Containing types of a nested context (all partial — CBOR012 otherwise), outermost first.
+        var containingTypes = GetContainingTypes(contextType);
+        foreach (var containingType in containingTypes)
+        {
+            builder.AppendLine($"partial {GetPartialDeclarationHead(containingType)}");
+            builder.AppendLine("{");
+        }
+
+        // Add partial class declaration, keeping the user's accessibility (a hard-coded `public`
+        // conflicts with an `internal partial class` declaration: CS0262).
+        var contextTypeRef = GetNameWithTypeParameters(contextType);
+        builder.AppendLine($"{GetAccessibilityKeyword(contextType.DeclaredAccessibility)}partial class {contextTypeRef}");
         builder.AppendLine("{");
 
         // Add Default property
-        builder.AppendLine($"    public static {contextType.Name} Default {{ get; }} = new {contextType.Name}();");
+        builder.AppendLine($"    public static {contextTypeRef} Default {{ get; }} = new {contextTypeRef}();");
         builder.AppendLine();
 
         // Add GetTypeInfo implementation. Covers registered and discovered types; unsupported
@@ -293,7 +435,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             var propertyName = GetPropertyNameFromType(typeSymbol);
             builder.AppendLine($"    private sealed class {propertyName}TypeInfo : NCborTypeInfo<{typeName}>");
             builder.AppendLine("    {");
-            builder.AppendLine($"        private readonly {contextType.Name} _context;");
+            builder.AppendLine($"        private readonly {contextTypeRef} _context;");
             if (typeSymbol is INamedTypeSymbol namedTypeSymbolForConverters)
             {
                 // Cache one instance per distinct [NCborConverter] type instead of allocating a
@@ -303,7 +445,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
                     builder.AppendLine($"        private static readonly {converterType} {SerializationCodeGenerator.GetConverterFieldName(converterType)} = new {converterType}();");
                 }
             }
-            builder.AppendLine($"        public {propertyName}TypeInfo({contextType.Name} context) => _context = context;");
+            builder.AppendLine($"        public {propertyName}TypeInfo({contextTypeRef} context) => _context = context;");
             builder.AppendLine($"        public override void Serialize(CborWriter writer, {typeName} value, int depth = 0)");
             builder.AppendLine("        {");
             builder.AppendLine($"            if (depth >= {maxDepth}) throw new NCborSerializationException(typeof({typeName}), \"Maximum serialization depth ({maxDepth}) exceeded at depth \" + depth + \". This usually indicates a circular reference; increase NCborSourceGenerationOptionsAttribute.MaxDepth if the object graph is intentionally this deep.\");");
@@ -329,7 +471,7 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
             var messageLiteral = "\"" + message.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
             builder.AppendLine($"    private sealed class {propertyName}TypeInfo : NCborTypeInfo<{typeName}>");
             builder.AppendLine("    {");
-            builder.AppendLine($"        public {propertyName}TypeInfo({contextType.Name} context) {{ }}");
+            builder.AppendLine($"        public {propertyName}TypeInfo({contextTypeRef} context) {{ }}");
             builder.AppendLine($"        public override void Serialize(CborWriter writer, {typeName} value, int depth = 0) => throw new NCborSerializationException(typeof({typeName}), {messageLiteral});");
             builder.AppendLine($"        public override {typeName} Deserialize(CborReader reader, int depth = 0) => throw new NCborDeserializationException(typeof({typeName}), {messageLiteral});");
             builder.AppendLine("    }");
@@ -340,6 +482,10 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         GenerateNullableHelpers(builder);
 
         builder.AppendLine("}"); // close class
+        foreach (var _ in containingTypes)
+        {
+            builder.AppendLine("}"); // close containing type
+        }
         if (!string.IsNullOrEmpty(namespaceName))
         {
             builder.AppendLine("}"); // close namespace
@@ -509,20 +655,29 @@ internal static class TrackingNames
 /// </summary>
 internal sealed class ContextModel : IEquatable<ContextModel>
 {
-    public ContextModel(string hintName, string source, EquatableArray<DiagnosticInfo> diagnostics)
+    public ContextModel(string hintName, string disambiguatedHintName, string? source, EquatableArray<DiagnosticInfo> diagnostics)
     {
         HintName = hintName;
+        DisambiguatedHintName = disambiguatedHintName;
         Source = source;
         Diagnostics = diagnostics;
     }
 
+    /// <summary>Readable hint name, used unless another context's collides with it.</summary>
     public string HintName { get; }
-    public string Source { get; }
+
+    /// <summary>Hint name carrying a stable hash of the fully qualified name; used on collision.</summary>
+    public string DisambiguatedHintName { get; }
+
+    /// <summary>Generated source, or null when nothing can be generated (e.g. CBOR012).</summary>
+    public string? Source { get; }
+
     public EquatableArray<DiagnosticInfo> Diagnostics { get; }
 
     public bool Equals(ContextModel? other) =>
         other is not null &&
         string.Equals(HintName, other.HintName, StringComparison.Ordinal) &&
+        string.Equals(DisambiguatedHintName, other.DisambiguatedHintName, StringComparison.Ordinal) &&
         string.Equals(Source, other.Source, StringComparison.Ordinal) &&
         Diagnostics.Equals(other.Diagnostics);
 
@@ -533,7 +688,8 @@ internal sealed class ContextModel : IEquatable<ContextModel>
         unchecked
         {
             var hash = StringComparer.Ordinal.GetHashCode(HintName);
-            hash = (hash * 31) + StringComparer.Ordinal.GetHashCode(Source);
+            hash = (hash * 31) + StringComparer.Ordinal.GetHashCode(DisambiguatedHintName);
+            hash = (hash * 31) + (Source is null ? 0 : StringComparer.Ordinal.GetHashCode(Source));
             hash = (hash * 31) + Diagnostics.GetHashCode();
             return hash;
         }
@@ -652,14 +808,16 @@ internal sealed class LocationInfo : IEquatable<LocationInfo>
 
 /// <summary>
 /// Immutable array wrapper with element-wise (value) equality. <see cref="ImmutableArray{T}"/>
-/// compares by reference, which would defeat incremental caching.
+/// compares by reference, which would defeat incremental caching. <c>default</c> behaves as
+/// empty, for equality and hashing alike. The constructor copies its argument, so later writes
+/// to the caller's array can't change a value already handed to the incremental pipeline.
 /// </summary>
 internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnumerable<T>
     where T : IEquatable<T>
 {
     private readonly T[]? _items;
 
-    public EquatableArray(T[] items) => _items = items;
+    public EquatableArray(T[] items) => _items = items.Length == 0 ? null : (T[])items.Clone();
 
     public int Length => _items?.Length ?? 0;
 
@@ -683,13 +841,11 @@ internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnu
 
     public override int GetHashCode()
     {
-        if (_items is null)
-            return 0;
-
+        // Same value for default and for an empty array, which Equals treats as equal.
         unchecked
         {
             var hash = 17;
-            foreach (var item in _items)
+            foreach (var item in _items ?? Array.Empty<T>())
                 hash = (hash * 31) + (item is null ? 0 : EqualityComparer<T>.Default.GetHashCode(item));
             return hash;
         }

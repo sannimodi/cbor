@@ -3,128 +3,166 @@ namespace NCbor.Generator;
 [Generator(LanguageNames.CSharp)]
 public sealed class NCborSourceGenerator : IIncrementalGenerator
 {
+    private const string SerializableAttributeMetadataName = "NCbor.NCborSerializableAttribute";
+
+    // RS2008 (release tracking) needs AnalyzerReleases.*.md wired up as AdditionalFiles in the
+    // csproj; RS1032 objects to CBOR008's existing message punctuation, which is kept verbatim.
+    // Both only surface now that the descriptors are static fields rather than inline `new`s.
+#pragma warning disable RS2008, RS1032
+    private static readonly DiagnosticDescriptor UncoveredGetOnlyProperty = new DiagnosticDescriptor(
+        "CBOR005", "NCbor Generator",
+        "Property '{0}' on type '{1}' has no public setter and is not covered by a [NCborConstructor] parameter — it will be silently excluded from serialization. Add a setter, cover it in the constructor, or mark it [NCborIgnore] if intentional.",
+        "Usage", DiagnosticSeverity.Warning, true);
+
+    private static readonly DiagnosticDescriptor UnmatchedConstructorParameter = new DiagnosticDescriptor(
+        "CBOR006", "NCbor Generator",
+        "Constructor parameter '{0}' on type '{1}' has no matching property (by name) — it will always deserialize to its default value instead of data from the CBOR payload. Add a property named '{0}' or remove the parameter.",
+        "Usage", DiagnosticSeverity.Warning, true);
+
+    private static readonly DiagnosticDescriptor AmbiguousConstructors = new DiagnosticDescriptor(
+        "CBOR007", "NCbor Generator",
+        "Type '{0}' has more than one constructor marked [NCborConstructor]. Exactly one constructor may be marked for deserialization — remove the attribute from the others.",
+        "Usage", DiagnosticSeverity.Error, true);
+
+    private static readonly DiagnosticDescriptor MisusedEnumAsString = new DiagnosticDescriptor(
+        "CBOR008", "NCbor Generator",
+        "Property '{0}' on type '{1}' is marked [NCborEnumAsString] but its type is not an enum (or nullable enum) — the attribute has no effect and the property serializes normally.",
+        "Usage", DiagnosticSeverity.Warning, true);
+#pragma warning restore RS2008, RS1032
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        // Find all partial class declarations
-        var classDeclarations = context.SyntaxProvider
-            .CreateSyntaxProvider(
-                predicate: (node, _) => node is ClassDeclarationSyntax c && c.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
-                transform: (ctx, _) => (ClassDeclarationSyntax)ctx.Node)
-            .Where(cls => cls != null);
+        // ForAttributeWithMetadataName only re-parses syntax trees that changed and only hands the
+        // transform the declarations that actually carry [NCborSerializable]. The transform does
+        // all symbol-dependent work and returns a fully equatable model (no ISymbol, Compilation,
+        // SyntaxNode or Location), so when an edit elsewhere yields an identical model Roslyn
+        // skips the AddSource output step entirely.
+        var contexts = context.SyntaxProvider
+            .ForAttributeWithMetadataName(
+                SerializableAttributeMetadataName,
+                predicate: static (node, _) => node is ClassDeclarationSyntax c && c.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)),
+                transform: static (ctx, ct) => CreateContextModel(ctx, ct))
+            .Where(static model => model is not null)
+            .Select(static (model, _) => model!)
+            .WithTrackingName(TrackingNames.ContextModels);
 
-        // Combine with compilation
-        var compilationAndClasses = context.CompilationProvider.Combine(classDeclarations.Collect());
+        context.RegisterSourceOutput(
+            contexts.Select(static (model, _) => (model.HintName, model.Source)).WithTrackingName(TrackingNames.GeneratedSource),
+            static (spc, output) => spc.AddSource(output.HintName, SourceText.From(output.Source, Encoding.UTF8)));
 
-        context.RegisterSourceOutput(compilationAndClasses, (spc, source) => GenerateSource(spc, source.Left, source.Right));
+        // Diagnostics are reported from a separate node joined with the compilation so they can be
+        // rehydrated against the real SyntaxTree. A path-only Location.Create(...) location has no
+        // SourceTree, which makes `#pragma warning disable CBOR00x` (and per-file .editorconfig
+        // severity) silently stop applying. Only contexts that actually have diagnostics reach
+        // this node, and the work is a cheap tree lookup — source generation above stays cached.
+        var diagnostics = contexts
+            .Select(static (model, _) => model.Diagnostics)
+            .Where(static diags => diags.Length > 0)
+            .Combine(context.CompilationProvider);
+
+        context.RegisterSourceOutput(diagnostics, static (spc, source) =>
+        {
+            foreach (var diagnostic in source.Left)
+                spc.ReportDiagnostic(diagnostic.ToDiagnostic(source.Right));
+        });
     }
 
-    private static void GenerateSource(SourceProductionContext context, Compilation compilation, ImmutableArray<ClassDeclarationSyntax> classes)
+    private static ContextModel? CreateContextModel(GeneratorAttributeSyntaxContext ctx, CancellationToken cancellationToken)
     {
-        // Diagnostic: generator running
-        context.ReportDiagnostic(Diagnostic.Create(
-            new DiagnosticDescriptor(
-                "CBOR001", "NCbor Generator", "NCbor source generator running. Found {0} partial classes.", "Debug", DiagnosticSeverity.Info, true),
-            Location.None, classes.Length));
+        if (ctx.TargetSymbol is not INamedTypeSymbol typeSymbol || ctx.Attributes.IsEmpty)
+            return null;
 
-        var cbOrSerializableAttributeSymbol = compilation.GetTypeByMetadataName("NCbor.NCborSerializableAttribute");
-        if (cbOrSerializableAttributeSymbol == null)
+        // ctx.Attributes only holds the matching attributes written on *this* declaration. A context
+        // split across several partial declarations must still see every [NCborSerializable] from
+        // all of them, in declaration order — which is what GetAttributes() returns.
+        var serializableAttributeClass = ctx.Attributes[0].AttributeClass;
+        var serializableAttributes = typeSymbol.GetAttributes()
+            .Where(attr => SymbolEqualityComparer.Default.Equals(attr.AttributeClass, serializableAttributeClass))
+            .ToImmutableArray();
+
+        if (serializableAttributes.IsEmpty)
+            return null;
+
+        // The transform runs once per attributed declaration. Only the declaration holding the
+        // first matching attribute emits, so a multi-declaration context yields one model (and one
+        // AddSource call) instead of duplicates with the same hint name.
+        var firstApplication = serializableAttributes[0].ApplicationSyntaxReference;
+        if (firstApplication != null &&
+            (firstApplication.SyntaxTree != ctx.TargetNode.SyntaxTree || !ctx.TargetNode.Span.Contains(firstApplication.Span)))
         {
-            context.ReportDiagnostic(Diagnostic.Create(
-                new DiagnosticDescriptor("CBOR002", "NCbor Generator", "Could not find NCborSerializableAttribute.", "Error", DiagnosticSeverity.Error, true),
-                Location.None));
-            return;
+            return null;
         }
 
-        foreach (var classDecl in classes)
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var diagnostics = new List<DiagnosticInfo>();
+
+        // Warn about get-only properties that will be silently dropped from serialization
+        // (no setter, and not covered by a [NCborConstructor] parameter if one exists).
+        var contextDefaultIgnoreCondition = GetDefaultIgnoreCondition(typeSymbol);
+        foreach (var attr in serializableAttributes)
         {
-            var model = compilation.GetSemanticModel(classDecl.SyntaxTree);
-            var typeSymbol = model.GetDeclaredSymbol(classDecl);
-            if (typeSymbol == null)
+            if (attr.ConstructorArguments.Length == 0)
+                continue;
+            if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol registeredType)
                 continue;
 
-            // Only process context classes with [CborSerializable] attributes
-            var serializableAttributes = typeSymbol.GetAttributes()
-                .Where(attr => SymbolEqualityComparer.Default.Equals(attr.AttributeClass, cbOrSerializableAttributeSymbol))
-                .ToImmutableArray();
-
-            if (!serializableAttributes.Any())
-                continue;
-
-            // Warn about get-only properties that will be silently dropped from serialization
-            // (no setter, and not covered by a [NCborConstructor] parameter if one exists).
-            var contextDefaultIgnoreCondition = GetDefaultIgnoreCondition(typeSymbol);
-            foreach (var attr in serializableAttributes)
+            foreach (var uncovered in SerializationCodeGenerator.GetUncoveredGetOnlyProperties(registeredType, contextDefaultIgnoreCondition))
             {
-                if (attr.ConstructorArguments.Length == 0)
-                    continue;
-                if (attr.ConstructorArguments[0].Value is not INamedTypeSymbol registeredType)
-                    continue;
-
-                foreach (var uncovered in SerializationCodeGenerator.GetUncoveredGetOnlyProperties(registeredType, contextDefaultIgnoreCondition))
-                {
-                    var location = uncovered.Locations.FirstOrDefault() ?? Location.None;
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        new DiagnosticDescriptor("CBOR005", "NCbor Generator",
-                            "Property '{0}' on type '{1}' has no public setter and is not covered by a [NCborConstructor] parameter — it will be silently excluded from serialization. Add a setter, cover it in the constructor, or mark it [NCborIgnore] if intentional.",
-                            "Usage", DiagnosticSeverity.Warning, true),
-                        location, uncovered.Name, registeredType.Name));
-                }
-
-                // Warn about [NCborConstructor] parameters with no matching property — they
-                // would otherwise silently deserialize to default(T) forever.
-                foreach (var unmatchedParam in SerializationCodeGenerator.GetUnmatchedConstructorParameters(registeredType, contextDefaultIgnoreCondition))
-                {
-                    var location = unmatchedParam.Locations.FirstOrDefault() ?? Location.None;
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        new DiagnosticDescriptor("CBOR006", "NCbor Generator",
-                            "Constructor parameter '{0}' on type '{1}' has no matching property (by name) — it will always deserialize to its default value instead of data from the CBOR payload. Add a property named '{0}' or remove the parameter.",
-                            "Usage", DiagnosticSeverity.Warning, true),
-                        location, unmatchedParam.Name, registeredType.Name));
-                }
-
-                // Error: more than one [NCborConstructor] on the same type is ambiguous — the
-                // generator has no principled way to pick the "right" one, so this must be an
-                // error rather than a silently-arbitrary choice.
-                if (SerializationCodeGenerator.HasAmbiguousConstructors(registeredType))
-                {
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        new DiagnosticDescriptor("CBOR007", "NCbor Generator",
-                            "Type '{0}' has more than one constructor marked [NCborConstructor]. Exactly one constructor may be marked for deserialization — remove the attribute from the others.",
-                            "Usage", DiagnosticSeverity.Error, true),
-                        Location.None, registeredType.Name));
-                }
-
-                // Warn about [NCborEnumAsString] applied to a non-enum property — it silently
-                // has no effect today.
-                foreach (var misused in SerializationCodeGenerator.GetMisusedEnumAsStringProperties(registeredType))
-                {
-                    var location = misused.Locations.FirstOrDefault() ?? Location.None;
-                    context.ReportDiagnostic(Diagnostic.Create(
-                        new DiagnosticDescriptor("CBOR008", "NCbor Generator",
-                            "Property '{0}' on type '{1}' is marked [NCborEnumAsString] but its type is not an enum (or nullable enum) — the attribute has no effect and the property serializes normally.",
-                            "Usage", DiagnosticSeverity.Warning, true),
-                        location, misused.Name, registeredType.Name));
-                }
+                diagnostics.Add(DiagnosticInfo.Create(UncoveredGetOnlyProperty, uncovered.Locations.FirstOrDefault(), uncovered.Name, registeredType.Name));
             }
 
-            // Diagnostic: found context class
-            context.ReportDiagnostic(Diagnostic.Create(
-                new DiagnosticDescriptor("CBOR003", "NCbor Generator", "Generating context for {0}", "Debug", DiagnosticSeverity.Info, true),
-                Location.None, typeSymbol.Name));
-
-            var source = GenerateContextSource(typeSymbol, serializableAttributes);
-
-            // Diagnostic: show generated code
-            var lines = source.Split('\n');
-            for (int i = 0; i < lines.Length; i++)
+            // Warn about [NCborConstructor] parameters with no matching property — they
+            // would otherwise silently deserialize to default(T) forever.
+            foreach (var unmatchedParam in SerializationCodeGenerator.GetUnmatchedConstructorParameters(registeredType, contextDefaultIgnoreCondition))
             {
-                context.ReportDiagnostic(Diagnostic.Create(
-                    new DiagnosticDescriptor("CBOR004", "NCbor Generator", "Line {0}: {1}", "Debug", DiagnosticSeverity.Info, true),
-                    Location.None, i + 1, lines[i].TrimEnd()));
+                diagnostics.Add(DiagnosticInfo.Create(UnmatchedConstructorParameter, unmatchedParam.Locations.FirstOrDefault(), unmatchedParam.Name, registeredType.Name));
             }
 
-            context.AddSource($"{typeSymbol.Name}.g.cs", SourceText.From(source, Encoding.UTF8));
+            // Error: more than one [NCborConstructor] on the same type is ambiguous — the
+            // generator has no principled way to pick the "right" one, so this must be an
+            // error rather than a silently-arbitrary choice.
+            if (SerializationCodeGenerator.HasAmbiguousConstructors(registeredType))
+            {
+                diagnostics.Add(DiagnosticInfo.Create(AmbiguousConstructors, null, registeredType.Name));
+            }
+
+            // Warn about [NCborEnumAsString] applied to a non-enum property — it silently
+            // has no effect today.
+            foreach (var misused in SerializationCodeGenerator.GetMisusedEnumAsStringProperties(registeredType))
+            {
+                diagnostics.Add(DiagnosticInfo.Create(MisusedEnumAsString, misused.Locations.FirstOrDefault(), misused.Name, registeredType.Name));
+            }
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var source = GenerateContextSource(typeSymbol, serializableAttributes);
+
+        return new ContextModel(GetHintName(typeSymbol), source, new EquatableArray<DiagnosticInfo>(diagnostics.ToArray()));
+    }
+
+    /// <summary>
+    /// Fully qualified hint name (e.g. <c>MyApp.Serialization.MyContext.g.cs</c>; nested types are
+    /// joined with '.') so same-named contexts in different namespaces or containing types don't
+    /// collide. Characters outside [A-Za-z0-9_.] (generic brackets, etc.) become '_'.
+    /// </summary>
+    private static string GetHintName(INamedTypeSymbol typeSymbol)
+    {
+        var fullName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        const string globalPrefix = "global::";
+        if (fullName.StartsWith(globalPrefix, StringComparison.Ordinal))
+            fullName = fullName.Substring(globalPrefix.Length);
+
+        var builder = new StringBuilder(fullName.Length + 5);
+        foreach (var ch in fullName)
+        {
+            var valid = (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '.';
+            builder.Append(valid ? ch : '_');
+        }
+
+        builder.Append(".g.cs");
+        return builder.ToString();
     }
 
     private static string GenerateContextSource(INamedTypeSymbol contextType, ImmutableArray<AttributeData> serializableAttributes)
@@ -569,4 +607,218 @@ public sealed class NCborSourceGenerator : IIncrementalGenerator
         // System.Text.Json's actual default behavior.
         return NCborIgnoreCondition.Never;
     }
+}
+
+/// <summary>Step names for incremental-caching assertions (GeneratorDriverOptions.TrackIncrementalGeneratorSteps).</summary>
+internal static class TrackingNames
+{
+    public const string ContextModels = nameof(ContextModels);
+    public const string GeneratedSource = nameof(GeneratedSource);
+}
+
+/// <summary>
+/// Everything RegisterSourceOutput needs for one context class. Value-equatable and free of
+/// ISymbol / Compilation / SyntaxNode / Location references, so the incremental pipeline can
+/// compare it against the previous run and skip the output step when nothing changed.
+/// </summary>
+internal sealed class ContextModel : IEquatable<ContextModel>
+{
+    public ContextModel(string hintName, string source, EquatableArray<DiagnosticInfo> diagnostics)
+    {
+        HintName = hintName;
+        Source = source;
+        Diagnostics = diagnostics;
+    }
+
+    public string HintName { get; }
+    public string Source { get; }
+    public EquatableArray<DiagnosticInfo> Diagnostics { get; }
+
+    public bool Equals(ContextModel? other) =>
+        other is not null &&
+        string.Equals(HintName, other.HintName, StringComparison.Ordinal) &&
+        string.Equals(Source, other.Source, StringComparison.Ordinal) &&
+        Diagnostics.Equals(other.Diagnostics);
+
+    public override bool Equals(object? obj) => Equals(obj as ContextModel);
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var hash = StringComparer.Ordinal.GetHashCode(HintName);
+            hash = (hash * 31) + StringComparer.Ordinal.GetHashCode(Source);
+            hash = (hash * 31) + Diagnostics.GetHashCode();
+            return hash;
+        }
+    }
+}
+
+/// <summary>
+/// A diagnostic captured in the transform step without holding a <see cref="Location"/> (which
+/// can root a SyntaxTree/Compilation). Rehydrated via <see cref="ToDiagnostic"/> at output time.
+/// Equality covers descriptor, location and message args, so an unchanged set of diagnostics
+/// compares equal across runs.
+/// </summary>
+internal sealed class DiagnosticInfo : IEquatable<DiagnosticInfo>
+{
+    private DiagnosticInfo(DiagnosticDescriptor descriptor, LocationInfo? location, EquatableArray<string> messageArgs)
+    {
+        Descriptor = descriptor;
+        SourceLocation = location;
+        MessageArgs = messageArgs;
+    }
+
+    /// <summary>Always one of the generator's static readonly descriptors (equatable by id/content).</summary>
+    public DiagnosticDescriptor Descriptor { get; }
+    public LocationInfo? SourceLocation { get; }
+    public EquatableArray<string> MessageArgs { get; }
+
+    public static DiagnosticInfo Create(DiagnosticDescriptor descriptor, Location? location, params string[] messageArgs) =>
+        new DiagnosticInfo(descriptor, LocationInfo.From(location), new EquatableArray<string>(messageArgs));
+
+    public Diagnostic ToDiagnostic(Compilation compilation) =>
+        Diagnostic.Create(Descriptor, SourceLocation?.ToLocation(compilation) ?? Location.None, MessageArgs.ToObjectArray());
+
+    public bool Equals(DiagnosticInfo? other) =>
+        other is not null &&
+        Descriptor.Equals(other.Descriptor) &&
+        Equals(SourceLocation, other.SourceLocation) &&
+        MessageArgs.Equals(other.MessageArgs);
+
+    public override bool Equals(object? obj) => Equals(obj as DiagnosticInfo);
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var hash = Descriptor.GetHashCode();
+            hash = (hash * 31) + (SourceLocation?.GetHashCode() ?? 0);
+            hash = (hash * 31) + MessageArgs.GetHashCode();
+            return hash;
+        }
+    }
+}
+
+/// <summary>Serializable stand-in for a source <see cref="Location"/>.</summary>
+internal sealed class LocationInfo : IEquatable<LocationInfo>
+{
+    private LocationInfo(string filePath, TextSpan textSpan, LinePositionSpan lineSpan)
+    {
+        FilePath = filePath;
+        TextSpan = textSpan;
+        LineSpan = lineSpan;
+    }
+
+    public string FilePath { get; }
+    public TextSpan TextSpan { get; }
+    public LinePositionSpan LineSpan { get; }
+
+    /// <summary>Returns null (→ <see cref="Location.None"/>) for metadata or missing locations.</summary>
+    public static LocationInfo? From(Location? location)
+    {
+        if (location is null || !location.IsInSource || location.SourceTree is null)
+            return null;
+
+        return new LocationInfo(location.SourceTree.FilePath, location.SourceSpan, location.GetLineSpan().Span);
+    }
+
+    /// <summary>
+    /// Prefers a real source location in <paramref name="compilation"/> (so pragma/editorconfig
+    /// suppression keeps working); falls back to a path-only location if the tree isn't found.
+    /// </summary>
+    public Location ToLocation(Compilation compilation)
+    {
+        foreach (var tree in compilation.SyntaxTrees)
+        {
+            // Line span is checked too: in-memory trees (e.g. generator tests) often share an
+            // empty FilePath, so the path alone doesn't identify the tree.
+            if (string.Equals(tree.FilePath, FilePath, StringComparison.Ordinal) &&
+                TextSpan.End <= tree.Length &&
+                tree.GetLineSpan(TextSpan).Span.Equals(LineSpan))
+            {
+                return Location.Create(tree, TextSpan);
+            }
+        }
+
+        return Location.Create(FilePath, TextSpan, LineSpan);
+    }
+
+    public bool Equals(LocationInfo? other) =>
+        other is not null &&
+        string.Equals(FilePath, other.FilePath, StringComparison.Ordinal) &&
+        TextSpan.Equals(other.TextSpan) &&
+        LineSpan.Equals(other.LineSpan);
+
+    public override bool Equals(object? obj) => Equals(obj as LocationInfo);
+
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var hash = StringComparer.Ordinal.GetHashCode(FilePath);
+            hash = (hash * 31) + TextSpan.GetHashCode();
+            hash = (hash * 31) + LineSpan.GetHashCode();
+            return hash;
+        }
+    }
+}
+
+/// <summary>
+/// Immutable array wrapper with element-wise (value) equality. <see cref="ImmutableArray{T}"/>
+/// compares by reference, which would defeat incremental caching.
+/// </summary>
+internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnumerable<T>
+    where T : IEquatable<T>
+{
+    private readonly T[]? _items;
+
+    public EquatableArray(T[] items) => _items = items;
+
+    public int Length => _items?.Length ?? 0;
+
+    public bool Equals(EquatableArray<T> other)
+    {
+        var left = _items ?? Array.Empty<T>();
+        var right = other._items ?? Array.Empty<T>();
+        if (left.Length != right.Length)
+            return false;
+
+        for (var i = 0; i < left.Length; i++)
+        {
+            if (!EqualityComparer<T>.Default.Equals(left[i], right[i]))
+                return false;
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is EquatableArray<T> other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        if (_items is null)
+            return 0;
+
+        unchecked
+        {
+            var hash = 17;
+            foreach (var item in _items)
+                hash = (hash * 31) + (item is null ? 0 : EqualityComparer<T>.Default.GetHashCode(item));
+            return hash;
+        }
+    }
+
+    public object[] ToObjectArray()
+    {
+        var items = _items ?? Array.Empty<T>();
+        var result = new object[items.Length];
+        for (var i = 0; i < items.Length; i++)
+            result[i] = items[i]!;
+        return result;
+    }
+
+    public IEnumerator<T> GetEnumerator() => ((IEnumerable<T>)(_items ?? Array.Empty<T>())).GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
 }

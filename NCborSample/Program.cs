@@ -98,6 +98,36 @@ Console.WriteLine($"  Name: {deserializedImmutablePerson.Name} (expected: {immut
 Console.WriteLine($"  Age: {deserializedImmutablePerson.Age} (expected: {immutablePerson.Age})");
 Console.WriteLine("=== Constructor-Based Deserialization Testing Complete ===\n");
 
+// === INHERITANCE + POSITIONAL RECORD TESTING (validates the generator's base-chain walk and general construction path) ===
+Console.WriteLine("=== Inheritance / Positional Record Testing ===");
+var derivedEntity = new DerivedEntitySample { Id = 42, Kind = "derived", Name = "Widget" };
+var derivedWriter = new CborWriter();
+DerivedEntitySample.Serialize(derivedWriter, derivedEntity);
+var derivedBytes = derivedWriter.Encode();
+var derivedKeys = new List<string>();
+var derivedKeyReader = new CborReader(derivedBytes);
+derivedKeyReader.ReadStartMap();
+while (derivedKeyReader.PeekState() != CborReaderState.EndMap) { derivedKeys.Add(derivedKeyReader.ReadTextString()); derivedKeyReader.SkipValue(); }
+var deserializedDerived = DerivedEntitySample.Deserialize(new CborReader(derivedBytes));
+Console.WriteLine($"Derived round-trip successful: {deserializedDerived.Id == 42 && deserializedDerived.Kind == "derived" && deserializedDerived.Name == "Widget"}");
+Console.WriteLine($"  Wire keys (base-first, override once): {string.Join(", ", derivedKeys)} (expected: Id, Kind, Name)");
+
+var positional = new PositionalRecordSample("Grace Hopper", 85) { Note = "admiral", Tag = "navy" };
+var positionalWriter = new CborWriter();
+PositionalRecordSample.Serialize(positionalWriter, positional);
+var deserializedPositional = PositionalRecordSample.Deserialize(new CborReader(positionalWriter.Encode()));
+Console.WriteLine($"Positional record round-trip successful: {deserializedPositional == positional}");
+
+// A payload that omits the settable "Note" key must keep the property initializer.
+var partialWriter = new CborWriter();
+partialWriter.WriteStartMap(null);
+partialWriter.WriteTextString("Name"); partialWriter.WriteTextString("Ada");
+partialWriter.WriteTextString("Age"); partialWriter.WriteInt32(36);
+partialWriter.WriteEndMap();
+var partialPositional = PositionalRecordSample.Deserialize(new CborReader(partialWriter.Encode()));
+Console.WriteLine($"Absent key keeps setter initializer: {partialPositional.Note == "default-note"} (Note = {partialPositional.Note})");
+Console.WriteLine("=== Inheritance / Positional Record Testing Complete ===\n");
+
 // Create a comprehensive Person object with all data types
 var person = new Person
 {

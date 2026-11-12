@@ -226,8 +226,9 @@ internal static partial class SerializationCodeGenerator
     private static IEnumerable<IPropertySymbol> GetSerializableProperties(INamedTypeSymbol typeSymbol, NCborIgnoreCondition defaultIgnoreCondition)
     {
         var constructor = GetDeserializationConstructor(typeSymbol);
-        return GetAllInstanceProperties(typeSymbol)
-            .Where(p => HasUsableSetter(p) || (constructor != null && FindMatchingParameter(constructor, p) != null))
+        var allProperties = GetAllInstanceProperties(typeSymbol);
+        return allProperties
+            .Where(p => HasUsableSetter(p) || (constructor != null && FindMatchingParameter(constructor, p, allProperties) != null))
             .Where(p => !IsAlwaysIgnored(p, defaultIgnoreCondition));
     }
 
@@ -284,18 +285,43 @@ internal static partial class SerializationCodeGenerator
     }
 
     /// <summary>
-    /// Matches a constructor parameter to a property by name (case-insensitive). Custom wire
-    /// names via [NCborPropertyName] on the *parameter* (rather than the property) are not
-    /// consulted here — only the C# names are compared.
+    /// The constructor parameter that feeds <paramref name="property"/>: the inverse of
+    /// <see cref="FindMatchingProperty"/> over <paramref name="allProperties"/> (the type's full
+    /// <see cref="GetAllInstanceProperties"/> set), so a parameter feeds at most one property even
+    /// when two property names differ only by case.
     /// </summary>
-    private static IParameterSymbol? FindMatchingParameter(IMethodSymbol constructor, IPropertySymbol property)
+    private static IParameterSymbol? FindMatchingParameter(IMethodSymbol constructor, IPropertySymbol property, IReadOnlyList<IPropertySymbol> allProperties)
     {
-        return constructor.Parameters.FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.OrdinalIgnoreCase));
+        return constructor.Parameters.FirstOrDefault(p =>
+            SymbolEqualityComparer.Default.Equals(FindMatchingProperty(allProperties, p), property));
     }
 
+    /// <summary>
+    /// Matches a constructor parameter to a property by C# name: an exact (case-sensitive) match
+    /// first; otherwise a case-insensitive match, but only when exactly one property matches that
+    /// way. Pass the type's full <see cref="GetAllInstanceProperties"/> set, not a filtered one,
+    /// so every caller agrees on the mapping. Custom wire names via [NCborPropertyName] are not
+    /// consulted — only the C# names are compared.
+    /// </summary>
     private static IPropertySymbol? FindMatchingProperty(IEnumerable<IPropertySymbol> properties, IParameterSymbol parameter)
     {
-        return properties.FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
+        var candidates = properties as IReadOnlyCollection<IPropertySymbol> ?? properties.ToList();
+        var exact = candidates.FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.Ordinal));
+        if (exact != null)
+            return exact;
+
+        var caseInsensitive = candidates.Where(p => string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+        return caseInsensitive.Count == 1 ? caseInsensitive[0] : null;
+    }
+
+    /// <summary>
+    /// The serialized property a constructor parameter is filled from, or null when the
+    /// parameter matches no property, or matches one that isn't serialized (e.g. ignored).
+    /// </summary>
+    private static IPropertySymbol? FindSerializedPropertyForParameter(IParameterSymbol parameter, IReadOnlyList<IPropertySymbol> allProperties, IEnumerable<IPropertySymbol> serializedProperties)
+    {
+        var matched = FindMatchingProperty(allProperties, parameter);
+        return matched != null && serializedProperties.Contains(matched, SymbolEqualityComparer.Default) ? matched : null;
     }
 
     /// <summary>
@@ -319,12 +345,13 @@ internal static partial class SerializationCodeGenerator
         }
 
         var constructor = resolution.ParameterizedConstructor;
-        return GetAllInstanceProperties(typeSymbol)
+        var allProperties = GetAllInstanceProperties(typeSymbol);
+        return allProperties
             .Where(p => !HasUsableSetter(p))
             // Already-Always-ignored properties (own attribute or context default) are excluded
             // deliberately, not silently — no diagnostic needed for those.
             .Where(p => !IsAlwaysIgnored(p, defaultIgnoreCondition))
-            .Where(p => constructor == null || FindMatchingParameter(constructor, p) == null);
+            .Where(p => constructor == null || FindMatchingParameter(constructor, p, allProperties) == null);
     }
 
     /// <summary>
@@ -345,8 +372,9 @@ internal static partial class SerializationCodeGenerator
             return Enumerable.Empty<IParameterSymbol>();
         }
 
+        var allProperties = GetAllInstanceProperties(typeSymbol);
         var properties = GetSerializableProperties(typeSymbol, defaultIgnoreCondition).ToList();
-        return constructor.Parameters.Where(p => FindMatchingProperty(properties, p) == null);
+        return constructor.Parameters.Where(p => FindSerializedPropertyForParameter(p, allProperties, properties) == null);
     }
 
     /// <summary>
@@ -366,10 +394,28 @@ internal static partial class SerializationCodeGenerator
             .Where(p => p.Type.TypeKind != TypeKind.Enum && !TryGetNullableEnumUnderlyingType(p.Type, out _));
     }
 
+    /// <summary>
+    /// The NCbor attribute of the given type that applies to <paramref name="property"/>: its own
+    /// declaration if it has one, otherwise the nearest one up its <c>override</c> chain — so an
+    /// override that doesn't re-declare <c>[NCborIgnore]</c> / <c>[NCborPropertyName]</c> / ...
+    /// keeps the base declaration's (most-derived declaration wins, per attribute type). A
+    /// <c>new</c> property starts a fresh chain and inherits nothing.
+    /// </summary>
+    private static AttributeData? GetPropertyAttribute(IPropertySymbol property, string attributeFullName)
+    {
+        for (var current = property; current != null; current = current.OverriddenProperty)
+        {
+            var attribute = current.GetAttributes()
+                .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == attributeFullName);
+            if (attribute != null)
+                return attribute;
+        }
+        return null;
+    }
+
     private static AttributeData? GetIgnoreAttribute(IPropertySymbol property)
     {
-        return property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborIgnoreAttribute");
+        return GetPropertyAttribute(property, "NCbor.NCborIgnoreAttribute");
     }
 
     private static bool IsAlwaysIgnored(IPropertySymbol property, NCborIgnoreCondition defaultIgnoreCondition)
@@ -394,8 +440,7 @@ internal static partial class SerializationCodeGenerator
 
     private static AttributeData? GetDefaultValueAttribute(IPropertySymbol property)
     {
-        return property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborDefaultValueAttribute");
+        return GetPropertyAttribute(property, "NCbor.NCborDefaultValueAttribute");
     }
 
     /// <summary>
@@ -404,8 +449,7 @@ internal static partial class SerializationCodeGenerator
     /// </summary>
     private static string? GetConverterType(IPropertySymbol property)
     {
-        var converterAttr = property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborConverterAttribute");
+        var converterAttr = GetPropertyAttribute(property, "NCbor.NCborConverterAttribute");
         if (converterAttr == null || converterAttr.ConstructorArguments.Length == 0)
             return null;
 
@@ -449,8 +493,7 @@ internal static partial class SerializationCodeGenerator
 
     private static bool HasEnumAsStringAttribute(IPropertySymbol property)
     {
-        return property.GetAttributes()
-            .Any(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborEnumAsStringAttribute");
+        return GetPropertyAttribute(property, "NCbor.NCborEnumAsStringAttribute") != null;
     }
 
     private static bool TryGetNullableEnumUnderlyingType(ITypeSymbol type, out ITypeSymbol? enumType)
@@ -549,8 +592,7 @@ internal static partial class SerializationCodeGenerator
 
     private static string GetPropertyName(IPropertySymbol property, NCborNamingPolicy namingPolicy)
     {
-        var nameAttr = property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborPropertyNameAttribute");
+        var nameAttr = GetPropertyAttribute(property, "NCbor.NCborPropertyNameAttribute");
 
         if (nameAttr != null && nameAttr.ConstructorArguments.Length > 0)
         {

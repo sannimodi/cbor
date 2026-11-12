@@ -228,22 +228,12 @@ internal static partial class SerializationCodeGenerator
         ClassifyType(type, out _) == TypeShape.PlainObject && IsEnumerable(StripNullableAnnotation(type));
 
     /// <summary>
-    /// True for a type that comes from metadata (not this compilation's source) and whose root
-    /// namespace is <c>System</c> or <c>Microsoft</c> — the BCL / framework. A type declared in
-    /// source, or in a non-framework referenced assembly, is a user type.
+    /// True for a framework type: from metadata, with root namespace <c>System</c> or
+    /// <c>Microsoft</c> (the same rule as the base-chain walk, see <see cref="IsFrameworkType"/>).
+    /// A type declared in source, or in a non-framework referenced assembly, is a user type.
     /// </summary>
-    internal static bool IsFrameworkMetadataType(ITypeSymbol type)
-    {
-        if (!type.OriginalDefinition.DeclaringSyntaxReferences.IsEmpty)
-            return false;
-
-        var ns = type.ContainingNamespace;
-        if (ns == null || ns.IsGlobalNamespace)
-            return false;
-        while (ns.ContainingNamespace != null && !ns.ContainingNamespace.IsGlobalNamespace)
-            ns = ns.ContainingNamespace;
-        return ns.Name is "System" or "Microsoft";
-    }
+    internal static bool IsFrameworkMetadataType(ITypeSymbol type) =>
+        type is INamedTypeSymbol named && IsFrameworkType(named);
 
     private static bool ContainsDynamic(ITypeSymbol type) => type switch
     {

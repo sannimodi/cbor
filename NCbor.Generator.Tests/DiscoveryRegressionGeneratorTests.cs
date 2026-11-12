@@ -141,6 +141,7 @@ public class DiscoveryRegressionGeneratorTests
                     public TimeSpan T { get; set; }
                     public int Ro { get; }
                     [NCborEnumAsString] public int NotAnEnum { get; set; }
+                    public required int RequiredField;
                 }
                 public class D1 : Base { public int A { get; set; } }
                 public class D2 : Base { public int B { get; set; } }
@@ -158,6 +159,8 @@ public class DiscoveryRegressionGeneratorTests
             .Which.GetMessage().Should().Contain("'Ro'").And.Contain("'Base'");
         result.DiagnosticsWithId("CBOR008").Should().ContainSingle(result.ToString())
             .Which.GetMessage().Should().Contain("'NotAnEnum'").And.Contain("'Base'");
+        result.DiagnosticsWithId("CBOR014").Should().ContainSingle(result.ToString())
+            .Which.GetMessage().Should().Contain("'RequiredField'").And.Contain("'Base'");
         result.CompilationErrors.Should().BeEmpty(result.ToString());
     }
 

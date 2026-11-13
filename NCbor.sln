@@ -26,6 +26,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NCbor.Tests", "NCbor.Tests\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NCbor.ApiDemo", "NCbor.ApiDemo\NCbor.ApiDemo.csproj", "{E7C8A5D1-2B3F-4C9E-8D6A-1E4F7B9C0A2D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NCbor.Generator.Tests", "NCbor.Generator.Tests\NCbor.Generator.Tests.csproj", "{77346DFB-0E59-4742-847D-424B3229451B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -108,6 +110,18 @@ Global
 		{E7C8A5D1-2B3F-4C9E-8D6A-1E4F7B9C0A2D}.Release|x64.Build.0 = Release|Any CPU
 		{E7C8A5D1-2B3F-4C9E-8D6A-1E4F7B9C0A2D}.Release|x86.ActiveCfg = Release|Any CPU
 		{E7C8A5D1-2B3F-4C9E-8D6A-1E4F7B9C0A2D}.Release|x86.Build.0 = Release|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Debug|x64.Build.0 = Debug|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Debug|x86.Build.0 = Debug|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Release|x64.ActiveCfg = Release|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Release|x64.Build.0 = Release|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Release|x86.ActiveCfg = Release|Any CPU
+		{77346DFB-0E59-4742-847D-424B3229451B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -340,16 +340,13 @@ public class IgnoreConditionModel
 [NCborSerializable(typeof(EnumAsStringModel))]
 [NCborSerializable(typeof(ImmutablePerson))]
 [NCborSerializable(typeof(HybridConstructorModel))]
+// List<SimpleModel> is not a property type of any registered model (tests use it top-level), so
+// it stays registered. The other collection types (List<string>, Dictionary<string, string>,
+// Dictionary<string, SimpleModel>, Dictionary<string, List<string>>, ...) are discovered from
+// NestedModel/DictionaryModel/ComplexDictionaryModel. Dictionary<string, int> is also
+// discovered; it stays registered explicitly to prove duplicate registrations are deduplicated.
 [NCborSerializable(typeof(List<SimpleModel>))]
-[NCborSerializable(typeof(List<string>))]
-[NCborSerializable(typeof(Dictionary<string, string>))]
 [NCborSerializable(typeof(Dictionary<string, int>))]
-[NCborSerializable(typeof(Dictionary<int, string>))]
-[NCborSerializable(typeof(Dictionary<string, bool>))]
-[NCborSerializable(typeof(Dictionary<Guid, string>))]
-[NCborSerializable(typeof(Dictionary<string, SimpleModel>))]
-[NCborSerializable(typeof(Dictionary<string, List<string>>))]
-[NCborSerializable(typeof(Dictionary<string, Dictionary<string, int>>))]
 [NCborSerializable(typeof(string[]))]
 [NCborSerializable(typeof(int[]))]
 [NCborSerializable(typeof(double[]))]

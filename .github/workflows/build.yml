@@ -25,8 +25,10 @@ jobs:
       - name: Build
         run: dotnet build NCbor.sln --no-restore --configuration Release
 
+      # Runs every test project in the solution (NCbor.Tests + NCbor.Generator.Tests). Plain
+      # `--logger trx` gives each project its own .trx file instead of overwriting one name.
       - name: Test
-        run: dotnet test NCbor.Tests/NCbor.Tests.csproj --no-build --configuration Release --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
+        run: dotnet test NCbor.sln --no-build --configuration Release --logger trx --results-directory ./TestResults
 
       - name: Upload test results
         if: always()

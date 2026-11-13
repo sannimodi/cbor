@@ -1,8 +1,67 @@
 namespace NCbor.Generator;
 
-internal static class SerializationCodeGenerator
+internal static partial class SerializationCodeGenerator
 {
-    public static string GenerateSerializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this", NCborIgnoreCondition defaultIgnoreCondition = NCborIgnoreCondition.Never)
+    /// <summary>Name of the generated context helper that a property/element of an unsupported, un-stubbable type (CBOR009, e.g. <c>dynamic</c>) calls on write.</summary>
+    internal const string UnsupportedWriteHelperName = "ThrowUnsupportedTypeOnWrite";
+
+    /// <summary>Read-side counterpart of <see cref="UnsupportedWriteHelperName"/> (generic in the value type).</summary>
+    internal const string UnsupportedReadHelperName = "ThrowUnsupportedTypeOnRead";
+
+    /// <summary>
+    /// Built-in types that get a generated <c>ReadNullable{TypeName}</c> helper, and the reader
+    /// method it uses. Shared with discovery, which reserves the helper names.
+    /// </summary>
+    internal static readonly (string TypeName, string ReaderMethod)[] NullableHelpers =
+    {
+        ("Int32", "ReadInt32"),
+        ("Boolean", "ReadBoolean"),
+        ("String", "ReadTextString"),
+        ("Double", "ReadDouble"),
+        ("Single", "ReadSingle"),
+        ("Int64", "ReadInt64"),
+        ("UInt32", "ReadUInt32"),
+        ("UInt64", "ReadUInt64"),
+        ("Byte", "ReadUInt32"),
+        ("SByte", "ReadInt32"),
+        ("Int16", "ReadInt32"),
+        ("UInt16", "ReadUInt32"),
+        ("Decimal", "ReadDecimal"),
+        ("Guid", "ReadByteString"),
+        ("DateTime", "ReadTextString"),
+        ("DateTimeOffset", "ReadTextString"),
+    };
+
+    private static IEnumerable<string> NullableHelperTypeNames => NullableHelpers.Select(h => h.TypeName);
+
+    /// <summary>
+    /// How generated code spells a type: <c>global::</c>-qualified (so a global-namespace user
+    /// type can't bind to a same-named context member, generated <c>{Name}TypeInfo</c> class,
+    /// the context itself or a context type parameter), keywords escaped (<c>global::N.@event</c>),
+    /// and nullable reference annotations kept (<c>string?</c>), as the unqualified display string
+    /// had them. Not for <c>typeof(...)</c> of a possibly-annotated type: there the annotation is
+    /// an error, so those sites use <see cref="SymbolDisplayFormat.FullyQualifiedFormat"/>.
+    /// Diagnostics and exception messages keep the human-readable <c>ToDisplayString()</c>.
+    /// For the same reason generated locals are declared with explicit types, never <c>var</c>:
+    /// a user type named <c>var</c> in scope turns <c>var x = ...</c> into a declaration of that type.
+    /// </summary>
+    private static readonly SymbolDisplayFormat TypeReferenceFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat.AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
+
+    /// <summary>A type reference for generated code. See <see cref="TypeReferenceFormat"/>.</summary>
+    internal static string TypeRef(ITypeSymbol type) => type.ToDisplayString(TypeReferenceFormat);
+
+    /// <summary>
+    /// <paramref name="identifier"/> as it must be written in generated code: <c>@class</c> for
+    /// a reserved keyword, unchanged otherwise. Contextual keywords (<c>value</c>, <c>var</c>,
+    /// <c>record</c>, ...) are valid identifiers in every position the generator emits them and
+    /// are left alone. Never use the result as a CBOR key (the wire name is the unescaped one) or
+    /// inside a longer identifier (<c>__v_class</c>, not <c>__v_@class</c>).
+    /// </summary>
+    internal static string EscapeIdentifier(string identifier) =>
+        SyntaxFacts.GetKeywordKind(identifier) != SyntaxKind.None ? "@" + identifier : identifier;
+
+    public static string GenerateSerializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, ContextTypeNames names, string contextRef = "this", NCborIgnoreCondition defaultIgnoreCondition = NCborIgnoreCondition.Never)
     {
         var builder = new StringBuilder();
         if (IsByteArray(typeSymbol))
@@ -10,25 +69,32 @@ internal static class SerializationCodeGenerator
             builder.AppendLine(GenerateByteStringWrite("value"));
             return builder.ToString();
         }
-        if (IsList(typeSymbol, out var elementType))
+        // Registered built-ins (e.g. [NCborSerializable(typeof(int))]) and Nullable<built-in>.
+        if (IsBuiltInType(typeSymbol) || IsNullableBuiltInType(typeSymbol))
         {
-            if (elementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid list type.");
-                
-            builder.AppendLine("writer.WriteStartArray(value.Count);");
-            builder.AppendLine($"foreach (var item in value)");
+            builder.AppendLine(GenerateElementWrite("value", typeSymbol, contextRef, names));
+            return builder.ToString();
+        }
+        if (TryGetCollectionInfo(typeSymbol, out var collection))
+        {
+            if (collection.Kind == CollectionKind.Dictionary)
+            {
+                builder.AppendLine("writer.WriteStartMap(value.Count);");
+                builder.AppendLine($"foreach (global::System.Collections.Generic.KeyValuePair<{TypeRef(collection.KeyType!)}, {TypeRef(collection.ValueType!)}> kvp in value)");
+                builder.AppendLine("{");
+                // Dictionary keys are never null, so the key write has no null branch.
+                builder.AppendLine($"    {GenerateElementWrite("kvp.Key", collection.KeyType!, contextRef, names, isDictionaryKey: true)}");
+                builder.AppendLine($"    {GenerateElementWrite("kvp.Value", collection.ValueType!, contextRef, names)}");
+                builder.AppendLine("}");
+                builder.AppendLine("writer.WriteEndMap();");
+                return builder.ToString();
+            }
+
+            // IEnumerable<T> has no Count: write an indefinite-length array rather than enumerate twice.
+            builder.AppendLine(collection.HasCount ? "writer.WriteStartArray(value.Count);" : "writer.WriteStartArray(null);");
+            builder.AppendLine($"foreach ({TypeRef(collection.ElementType!)} item in value)");
             builder.AppendLine("{");
-            
-            // Handle built-in types directly, complex types via context
-            if (IsBuiltInType(elementType))
-            {
-                builder.AppendLine($"    {GenerateDirectSerialization("item", elementType)}");
-            }
-            else
-            {
-                builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(elementType)}.Serialize(writer, item, depth + 1);");
-            }
+            builder.AppendLine($"    {GenerateElementWrite("item", collection.ElementType!, contextRef, names)}");
             builder.AppendLine("}");
             builder.AppendLine("writer.WriteEndArray();");
             return builder.ToString();
@@ -37,58 +103,13 @@ internal static class SerializationCodeGenerator
         {
             if (arrayElementType == null)
                 throw new InvalidOperationException("Element type cannot be null for a valid array type.");
-                
+
             builder.AppendLine("writer.WriteStartArray(value.Length);");
-            builder.AppendLine($"foreach (var item in value)");
+            builder.AppendLine($"foreach ({TypeRef(arrayElementType)} item in value)");
             builder.AppendLine("{");
-            
-            // Handle built-in types directly, complex types via context
-            if (IsBuiltInType(arrayElementType))
-            {
-                builder.AppendLine($"    {GenerateDirectSerialization("item", arrayElementType)}");
-            }
-            else
-            {
-                builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(arrayElementType)}.Serialize(writer, item, depth + 1);");
-            }
+            builder.AppendLine($"    {GenerateElementWrite("item", arrayElementType, contextRef, names)}");
             builder.AppendLine("}");
             builder.AppendLine("writer.WriteEndArray();");
-            return builder.ToString();
-        }
-        if (IsDictionary(typeSymbol, out var keyType, out var valueType))
-        {
-            if (keyType == null || valueType == null)
-                throw new InvalidOperationException("Key and value types cannot be null for a valid dictionary type.");
-                
-            builder.AppendLine("writer.WriteStartMap(value.Count);");
-            builder.AppendLine($"foreach (var kvp in value)");
-            builder.AppendLine("{");
-            
-            // Serialize key
-            builder.AppendLine("    // Serialize key");
-            if (IsBuiltInType(keyType))
-            {
-                builder.AppendLine($"    {GenerateDirectSerialization("kvp.Key", keyType)}");
-            }
-            else
-            {
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(keyType)}.Serialize(writer, kvp.Key, depth + 1);");
-            }
-
-            // Serialize value
-            builder.AppendLine("    // Serialize value");
-            if (IsBuiltInType(valueType))
-            {
-                builder.AppendLine($"    {GenerateDirectSerialization("kvp.Value", valueType)}");
-            }
-            else
-            {
-                builder.AppendLine($"    {contextRef}.{GetPropertyNameFromType(valueType)}.Serialize(writer, kvp.Value, depth + 1);");
-            }
-            
-            builder.AppendLine("}");
-            builder.AppendLine("writer.WriteEndMap();");
             return builder.ToString();
         }
         var properties = GetSerializableProperties(typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties"), defaultIgnoreCondition);
@@ -96,7 +117,7 @@ internal static class SerializationCodeGenerator
         foreach (var property in properties)
         {
             var propertyName = GetPropertyName(property, namingPolicy);
-            var body = $"writer.WriteTextString(\"{propertyName}\");\n{GeneratePropertySerialization(property)}";
+            var body = $"writer.WriteTextString({SymbolDisplay.FormatLiteral(propertyName, quote: true)});\n{GeneratePropertySerialization(property, names)}";
             var writeGuard = GetWriteGuard(property, defaultIgnoreCondition);
             if (writeGuard != null)
             {
@@ -114,7 +135,7 @@ internal static class SerializationCodeGenerator
         return builder.ToString();
     }
 
-    public static string GenerateDeserializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, string contextRef = "this", NCborIgnoreCondition defaultIgnoreCondition = NCborIgnoreCondition.Never)
+    public static string GenerateDeserializationCode(ITypeSymbol typeSymbol, NCborNamingPolicy namingPolicy, ContextTypeNames names, string contextRef = "this", NCborIgnoreCondition defaultIgnoreCondition = NCborIgnoreCondition.Never)
     {
         var builder = new StringBuilder();
         if (IsByteArray(typeSymbol))
@@ -122,28 +143,44 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("return reader.ReadByteString();");
             return builder.ToString();
         }
-        if (IsList(typeSymbol, out var elementType))
+        // Registered built-ins (e.g. [NCborSerializable(typeof(int))]) and Nullable<built-in>.
+        if (IsBuiltInType(typeSymbol) || IsNullableBuiltInType(typeSymbol))
         {
-            if (elementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid list type.");
-                
-            builder.AppendLine($"var list = new System.Collections.Generic.List<{elementType.ToDisplayString()}>();");
+            builder.AppendLine($"return {GenerateElementRead(typeSymbol, contextRef, names)};");
+            return builder.ToString();
+        }
+        if (TryGetCollectionInfo(typeSymbol, out var collection))
+        {
+            if (collection.Kind == CollectionKind.Dictionary)
+            {
+                builder.AppendLine($"{collection.ConcreteTypeName} dictionary = new {collection.ConcreteTypeName}();");
+                builder.AppendLine("int? mapSize = reader.ReadStartMap();");
+                builder.AppendLine("for (int i = 0; mapSize == null || i < mapSize; i++)");
+                builder.AppendLine("{");
+                builder.AppendLine("    if (mapSize == null && reader.PeekState() == global::System.Formats.Cbor.CborReaderState.EndMap)");
+                builder.AppendLine("        break;");
+                // A CBOR null key would reach Dictionary.Add as a null (or default) key and escape as
+                // a raw ArgumentNullException / InvalidOperationException; reject it up front.
+                builder.AppendLine("    if (reader.PeekState() == global::System.Formats.Cbor.CborReaderState.Null)");
+                builder.AppendLine($"        throw new global::NCbor.NCborDeserializationException(typeof({typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}), \"null dictionary key\");");
+                builder.AppendLine($"    {TypeRef(collection.KeyType!)} key = {GenerateElementRead(collection.KeyType!, contextRef, names)};");
+                builder.AppendLine($"    {TypeRef(collection.ValueType!)} value = {GenerateElementRead(collection.ValueType!, contextRef, names)};");
+                builder.AppendLine("    dictionary.Add(key, value);");
+                builder.AppendLine("}");
+                builder.AppendLine("reader.ReadEndMap();");
+                builder.AppendLine("return dictionary;");
+                return builder.ToString();
+            }
+
+            // Interface-typed lists/sets (IReadOnlyList<T>, ISet<T>, ...) deserialize into the
+            // concrete List<T>/HashSet<T>, which is assignable to the declared return type.
+            builder.AppendLine($"{collection.ConcreteTypeName} list = new {collection.ConcreteTypeName}();");
             builder.AppendLine("int? length = reader.ReadStartArray();");
             builder.AppendLine("for (int i = 0; length == null || i < length; i++)");
             builder.AppendLine("{");
-            builder.AppendLine("    if (length == null && reader.PeekState() == CborReaderState.EndArray)");
+            builder.AppendLine("    if (length == null && reader.PeekState() == global::System.Formats.Cbor.CborReaderState.EndArray)");
             builder.AppendLine("        break;");
-            
-            // Handle built-in types directly, complex types via context
-            if (IsBuiltInType(elementType))
-            {
-                builder.AppendLine($"    var item = {GenerateDirectDeserialization(elementType)};");
-            }
-            else
-            {
-                builder.AppendLine($"    // Use the parent context's type info for the element type");
-                builder.AppendLine($"    var item = {contextRef}.{GetPropertyNameFromType(elementType)}.Deserialize(reader, depth + 1);");
-            }
+            builder.AppendLine($"    {TypeRef(collection.ElementType!)} item = {GenerateElementRead(collection.ElementType!, contextRef, names)};");
             builder.AppendLine("    list.Add(item);");
             builder.AppendLine("}");
             builder.AppendLine("reader.ReadEndArray();");
@@ -155,10 +192,8 @@ internal static class SerializationCodeGenerator
             if (arrayElementType == null)
                 throw new InvalidOperationException("Element type cannot be null for a valid array type.");
 
-            var elementTypeName = arrayElementType.ToDisplayString();
-            var itemExpression = IsBuiltInType(arrayElementType)
-                ? GenerateDirectDeserialization(arrayElementType)
-                : $"{contextRef}.{GetPropertyNameFromType(arrayElementType)}.Deserialize(reader, depth + 1)";
+            var elementTypeName = TypeRef(arrayElementType);
+            var itemExpression = GenerateElementRead(arrayElementType, contextRef, names);
 
             // Definite-length arrays (which is everything this library's own writer produces,
             // via WriteStartArray(value.Length)) allocate the array directly instead of paying
@@ -169,7 +204,7 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("int? length = reader.ReadStartArray();");
             builder.AppendLine("if (length is int definiteLength)");
             builder.AppendLine("{");
-            builder.AppendLine($"    result = new {elementTypeName}[definiteLength];");
+            builder.AppendLine($"    result = {GenerateArrayAllocation(arrayElementType, "definiteLength")};");
             builder.AppendLine("    for (int i = 0; i < definiteLength; i++)");
             builder.AppendLine("    {");
             builder.AppendLine($"        result[i] = {itemExpression};");
@@ -177,8 +212,8 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("}");
             builder.AppendLine("else");
             builder.AppendLine("{");
-            builder.AppendLine($"    var list = new System.Collections.Generic.List<{elementTypeName}>();");
-            builder.AppendLine("    while (reader.PeekState() != CborReaderState.EndArray)");
+            builder.AppendLine($"    global::System.Collections.Generic.List<{elementTypeName}> list = new global::System.Collections.Generic.List<{elementTypeName}>();");
+            builder.AppendLine("    while (reader.PeekState() != global::System.Formats.Cbor.CborReaderState.EndArray)");
             builder.AppendLine("    {");
             builder.AppendLine($"        list.Add({itemExpression});");
             builder.AppendLine("    }");
@@ -188,129 +223,39 @@ internal static class SerializationCodeGenerator
             builder.AppendLine("return result;");
             return builder.ToString();
         }
-        if (IsDictionary(typeSymbol, out var keyType, out var valueType))
-        {
-            if (keyType == null || valueType == null)
-                throw new InvalidOperationException("Key and value types cannot be null for a valid dictionary type.");
-                
-            builder.AppendLine($"var dictionary = new System.Collections.Generic.Dictionary<{keyType.ToDisplayString()}, {valueType.ToDisplayString()}>();");
-            builder.AppendLine("int? mapSize = reader.ReadStartMap();");
-            builder.AppendLine("for (int i = 0; mapSize == null || i < mapSize; i++)");
-            builder.AppendLine("{");
-            builder.AppendLine("    if (mapSize == null && reader.PeekState() == CborReaderState.EndMap)");
-            builder.AppendLine("        break;");
-            
-            // Deserialize key
-            builder.AppendLine("    // Deserialize key");
-            if (IsBuiltInType(keyType))
-            {
-                builder.AppendLine($"    var key = {GenerateDirectDeserialization(keyType)};");
-            }
-            else
-            {
-                builder.AppendLine($"    var key = {contextRef}.{GetPropertyNameFromType(keyType)}.Deserialize(reader, depth + 1);");
-            }
-
-            // Deserialize value
-            builder.AppendLine("    // Deserialize value");
-            if (IsBuiltInType(valueType))
-            {
-                builder.AppendLine($"    var value = {GenerateDirectDeserialization(valueType)};");
-            }
-            else
-            {
-                builder.AppendLine($"    var value = {contextRef}.{GetPropertyNameFromType(valueType)}.Deserialize(reader, depth + 1);");
-            }
-            
-            builder.AppendLine("    dictionary.Add(key, value);");
-            builder.AppendLine("}");
-            builder.AppendLine("reader.ReadEndMap();");
-            builder.AppendLine("return dictionary;");
-            return builder.ToString();
-        }
         var namedType = typeSymbol as INamedTypeSymbol ?? throw new InvalidOperationException($"Type {typeSymbol} is not a named type and cannot have properties");
-        var properties = GetSerializableProperties(namedType, defaultIgnoreCondition).ToList();
-        var constructor = GetDeserializationConstructor(namedType);
-
-        if (constructor != null)
-        {
-            // Constructor-based deserialization: read every property into a local first (get-only
-            // properties have no setter to assign into later), construct via the marked
-            // constructor, then assign any remaining settable properties it didn't cover.
-            foreach (var property in properties)
-            {
-                builder.AppendLine($"{property.Type.ToDisplayString()} __{property.Name} = default!;");
-            }
-            builder.AppendLine("reader.ReadStartMap();");
-            builder.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
-            builder.AppendLine("{");
-            builder.AppendLine("    var propertyName = reader.ReadTextString();");
-            builder.AppendLine("    switch (propertyName)");
-            builder.AppendLine("    {");
-            foreach (var property in properties)
-            {
-                var propertyName = GetPropertyName(property, namingPolicy);
-                builder.AppendLine($"        case \"{propertyName}\":");
-                builder.AppendLine($"            __{property.Name} = {GeneratePropertyDeserialization(property)};");
-                builder.AppendLine("            break;");
-            }
-            builder.AppendLine("        default:");
-            builder.AppendLine("            reader.SkipValue();");
-            builder.AppendLine("            break;");
-            builder.AppendLine("    }");
-            builder.AppendLine("}");
-            builder.AppendLine("reader.ReadEndMap();");
-
-            var ctorArgs = constructor.Parameters.Select(p =>
-            {
-                var matched = FindMatchingProperty(properties, p);
-                return matched != null ? $"__{matched.Name}" : $"default({p.Type.ToDisplayString()})!";
-            });
-            builder.AppendLine($"var result = new {typeSymbol.ToDisplayString()}({string.Join(", ", ctorArgs)});");
-
-            foreach (var property in properties)
-            {
-                if (property.SetMethod != null && FindMatchingParameter(constructor, property) == null)
-                {
-                    builder.AppendLine($"result.{property.Name} = __{property.Name};");
-                }
-            }
-
-            builder.AppendLine("return result;");
-            return builder.ToString();
-        }
-
-        builder.AppendLine($"var result = new {typeSymbol.ToDisplayString()}();");
-        builder.AppendLine("reader.ReadStartMap();");
-        builder.AppendLine("while (reader.PeekState() != CborReaderState.EndMap)");
-        builder.AppendLine("{");
-        builder.AppendLine("    var propertyName = reader.ReadTextString();");
-        builder.AppendLine("    switch (propertyName)");
-        builder.AppendLine("    {");
-        foreach (var property in properties)
-        {
-            var propertyName = GetPropertyName(property, namingPolicy);
-            builder.AppendLine($"        case \"{propertyName}\":");
-            builder.AppendLine($"            result.{property.Name} = {GeneratePropertyDeserialization(property)};");
-            builder.AppendLine("            break;");
-        }
-        builder.AppendLine("        default:");
-        builder.AppendLine("            reader.SkipValue();");
-        builder.AppendLine("            break;");
-        builder.AppendLine("    }");
-        builder.AppendLine("}");
-        builder.AppendLine("reader.ReadEndMap();");
-        builder.AppendLine("return result;");
-        return builder.ToString();
+        return GenerateObjectDeserialization(namedType, namingPolicy, defaultIgnoreCondition, names);
     }
 
+    /// <summary>
+    /// <c>new E[length]</c> for an array of <paramref name="elementType"/>. When the element is
+    /// itself an array the length goes in the <i>first</i> rank specifier — <c>new int[length][]</c>,
+    /// not <c>new int[][length]</c> (CS1586) — so the innermost element type is written first.
+    /// </summary>
+    private static string GenerateArrayAllocation(ITypeSymbol elementType, string lengthExpression)
+    {
+        var trailingRanks = new StringBuilder();
+        var innermost = elementType;
+        while (innermost is IArrayTypeSymbol nested)
+        {
+            trailingRanks.Append('[').Append(',', nested.Rank - 1).Append(']');
+            innermost = nested.ElementType;
+        }
+        return $"new {TypeRef(innermost)}[{lengthExpression}]{trailingRanks}";
+    }
+
+    /// <summary>
+    /// Properties that take part in serialization, in wire order: every reachable instance
+    /// property across the base chain (see <see cref="GetAllInstanceProperties"/>) that can be
+    /// written back — through a usable setter / init accessor, or a matching parameter of the
+    /// constructor deserialization uses — minus the ones ignored with Always.
+    /// </summary>
     private static IEnumerable<IPropertySymbol> GetSerializableProperties(INamedTypeSymbol typeSymbol, NCborIgnoreCondition defaultIgnoreCondition)
     {
         var constructor = GetDeserializationConstructor(typeSymbol);
-        return typeSymbol.GetMembers()
-            .OfType<IPropertySymbol>()
-            .Where(p => !p.IsStatic && p.GetMethod != null)
-            .Where(p => p.SetMethod != null || (constructor != null && FindMatchingParameter(constructor, p) != null))
+        var allProperties = GetAllInstanceProperties(typeSymbol);
+        return allProperties
+            .Where(p => HasUsableSetter(p) || (constructor != null && FindMatchingParameter(constructor, p, allProperties) != null))
             .Where(p => !IsAlwaysIgnored(p, defaultIgnoreCondition));
     }
 
@@ -325,13 +270,15 @@ internal static class SerializationCodeGenerator
     }
 
     /// <summary>
-    /// Returns the type's constructor marked with <c>[NCborConstructor]</c>, or null if it has
-    /// none. If more than one is marked, picks the first arbitrarily — <c>CBOR007</c> (see
-    /// NCborSourceGenerator.cs) reports that as a usage error rather than resolving it silently.
+    /// Returns the constructor whose parameters deserialization fills from the payload — the
+    /// <c>[NCborConstructor]</c>-marked one, or one auto-selected per
+    /// <see cref="ResolveConstructor"/> — or null when the instance is built with <c>new T()</c>
+    /// (or can't be built at all; see CBOR010). If more than one constructor is marked, picks the
+    /// first arbitrarily — <c>CBOR007</c> reports that as a usage error.
     /// </summary>
     private static IMethodSymbol? GetDeserializationConstructor(INamedTypeSymbol typeSymbol)
     {
-        return GetConstructorCandidates(typeSymbol).FirstOrDefault();
+        return ResolveConstructor(typeSymbol).ParameterizedConstructor;
     }
 
     /// <summary>
@@ -341,6 +288,15 @@ internal static class SerializationCodeGenerator
     public static bool HasAmbiguousConstructors(INamedTypeSymbol typeSymbol)
     {
         return GetConstructorCandidates(typeSymbol).Skip(1).Any();
+    }
+
+    /// <summary>
+    /// The second <c>[NCborConstructor]</c>-marked constructor (declaration order), or null when
+    /// fewer than two are marked — where CBOR007 is reported.
+    /// </summary>
+    public static IMethodSymbol? GetFirstRedundantMarkedConstructor(INamedTypeSymbol typeSymbol)
+    {
+        return GetConstructorCandidates(typeSymbol).Skip(1).FirstOrDefault();
     }
 
     /// <summary>
@@ -356,25 +312,51 @@ internal static class SerializationCodeGenerator
     }
 
     /// <summary>
-    /// Matches a constructor parameter to a property by name (case-insensitive). Custom wire
-    /// names via [NCborPropertyName] on the *parameter* (rather than the property) are not
-    /// consulted here — only the C# names are compared.
+    /// The constructor parameter that feeds <paramref name="property"/>: the inverse of
+    /// <see cref="FindMatchingProperty"/> over <paramref name="allProperties"/> (the type's full
+    /// <see cref="GetAllInstanceProperties"/> set), so a parameter feeds at most one property even
+    /// when two property names differ only by case.
     /// </summary>
-    private static IParameterSymbol? FindMatchingParameter(IMethodSymbol constructor, IPropertySymbol property)
+    private static IParameterSymbol? FindMatchingParameter(IMethodSymbol constructor, IPropertySymbol property, IReadOnlyList<IPropertySymbol> allProperties)
     {
-        return constructor.Parameters.FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.OrdinalIgnoreCase));
-    }
-
-    private static IPropertySymbol? FindMatchingProperty(IEnumerable<IPropertySymbol> properties, IParameterSymbol parameter)
-    {
-        return properties.FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
+        return constructor.Parameters.FirstOrDefault(p =>
+            SymbolEqualityComparer.Default.Equals(FindMatchingProperty(allProperties, p), property));
     }
 
     /// <summary>
-    /// Returns get-only properties that will be silently excluded from serialization: no public
-    /// setter, and (if the type has a <c>[NCborConstructor]</c>-marked constructor) not matched
-    /// to any of its parameters either. Used by the generator to emit a usage diagnostic instead
-    /// of dropping the property with no signal at all.
+    /// Matches a constructor parameter to a property by C# name: an exact (case-sensitive) match
+    /// first; otherwise a case-insensitive match, but only when exactly one property matches that
+    /// way. Pass the type's full <see cref="GetAllInstanceProperties"/> set, not a filtered one,
+    /// so every caller agrees on the mapping. Custom wire names via [NCborPropertyName] are not
+    /// consulted — only the C# names are compared.
+    /// </summary>
+    private static IPropertySymbol? FindMatchingProperty(IEnumerable<IPropertySymbol> properties, IParameterSymbol parameter)
+    {
+        var candidates = properties as IReadOnlyCollection<IPropertySymbol> ?? properties.ToList();
+        var exact = candidates.FirstOrDefault(p => string.Equals(p.Name, parameter.Name, StringComparison.Ordinal));
+        if (exact != null)
+            return exact;
+
+        var caseInsensitive = candidates.Where(p => string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
+        return caseInsensitive.Count == 1 ? caseInsensitive[0] : null;
+    }
+
+    /// <summary>
+    /// The serialized property a constructor parameter is filled from, or null when the
+    /// parameter matches no property, or matches one that isn't serialized (e.g. ignored).
+    /// </summary>
+    private static IPropertySymbol? FindSerializedPropertyForParameter(IParameterSymbol parameter, IReadOnlyList<IPropertySymbol> allProperties, IEnumerable<IPropertySymbol> serializedProperties)
+    {
+        var matched = FindMatchingProperty(allProperties, parameter);
+        return matched != null && serializedProperties.Contains(matched, SymbolEqualityComparer.Default) ? matched : null;
+    }
+
+    /// <summary>
+    /// Returns readable properties that will be silently excluded from serialization: no setter
+    /// the generated code can call (none, or private/protected), and not matched to a parameter
+    /// of the deserialization constructor either. Used by the generator to emit a usage
+    /// diagnostic instead of dropping the property with no signal at all. Empty when the type has
+    /// no usable constructor — CBOR010 already fails the build for that.
     /// </summary>
     public static IEnumerable<IPropertySymbol> GetUncoveredGetOnlyProperties(INamedTypeSymbol typeSymbol, NCborIgnoreCondition defaultIgnoreCondition)
     {
@@ -383,18 +365,24 @@ internal static class SerializationCodeGenerator
             return Enumerable.Empty<IPropertySymbol>();
         }
 
-        var constructor = GetDeserializationConstructor(typeSymbol);
-        return typeSymbol.GetMembers()
-            .OfType<IPropertySymbol>()
-            .Where(p => !p.IsStatic && p.GetMethod != null && p.SetMethod == null)
+        var resolution = ResolveConstructor(typeSymbol);
+        if (resolution.Kind == ConstructorKind.None)
+        {
+            return Enumerable.Empty<IPropertySymbol>();
+        }
+
+        var constructor = resolution.ParameterizedConstructor;
+        var allProperties = GetAllInstanceProperties(typeSymbol);
+        return allProperties
+            .Where(p => !HasUsableSetter(p))
             // Already-Always-ignored properties (own attribute or context default) are excluded
             // deliberately, not silently — no diagnostic needed for those.
             .Where(p => !IsAlwaysIgnored(p, defaultIgnoreCondition))
-            .Where(p => constructor == null || FindMatchingParameter(constructor, p) == null);
+            .Where(p => constructor == null || FindMatchingParameter(constructor, p, allProperties) == null);
     }
 
     /// <summary>
-    /// Returns <c>[NCborConstructor]</c> parameters with no matching property, which the
+    /// Returns deserialization-constructor parameters with no matching property, which the
     /// generator will silently initialize to <c>default(T)</c> on every deserialize — used to
     /// emit a usage diagnostic instead of leaving that discovery to a confused bug report.
     /// </summary>
@@ -411,8 +399,9 @@ internal static class SerializationCodeGenerator
             return Enumerable.Empty<IParameterSymbol>();
         }
 
+        var allProperties = GetAllInstanceProperties(typeSymbol);
         var properties = GetSerializableProperties(typeSymbol, defaultIgnoreCondition).ToList();
-        return constructor.Parameters.Where(p => FindMatchingProperty(properties, p) == null);
+        return constructor.Parameters.Where(p => FindSerializedPropertyForParameter(p, allProperties, properties) == null);
     }
 
     /// <summary>
@@ -427,16 +416,33 @@ internal static class SerializationCodeGenerator
             return Enumerable.Empty<IPropertySymbol>();
         }
 
-        return typeSymbol.GetMembers()
-            .OfType<IPropertySymbol>()
-            .Where(p => !p.IsStatic && HasEnumAsStringAttribute(p))
+        return GetAllInstanceProperties(typeSymbol)
+            .Where(HasEnumAsStringAttribute)
             .Where(p => p.Type.TypeKind != TypeKind.Enum && !TryGetNullableEnumUnderlyingType(p.Type, out _));
+    }
+
+    /// <summary>
+    /// The NCbor attribute of the given type that applies to <paramref name="property"/>: its own
+    /// declaration if it has one, otherwise the nearest one up its <c>override</c> chain — so an
+    /// override that doesn't re-declare <c>[NCborIgnore]</c> / <c>[NCborPropertyName]</c> / ...
+    /// keeps the base declaration's (most-derived declaration wins, per attribute type). A
+    /// <c>new</c> property starts a fresh chain and inherits nothing.
+    /// </summary>
+    private static AttributeData? GetPropertyAttribute(IPropertySymbol property, string attributeFullName)
+    {
+        for (var current = property; current != null; current = current.OverriddenProperty)
+        {
+            var attribute = current.GetAttributes()
+                .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == attributeFullName);
+            if (attribute != null)
+                return attribute;
+        }
+        return null;
     }
 
     private static AttributeData? GetIgnoreAttribute(IPropertySymbol property)
     {
-        return property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborIgnoreAttribute");
+        return GetPropertyAttribute(property, "NCbor.NCborIgnoreAttribute");
     }
 
     private static bool IsAlwaysIgnored(IPropertySymbol property, NCborIgnoreCondition defaultIgnoreCondition)
@@ -461,8 +467,7 @@ internal static class SerializationCodeGenerator
 
     private static AttributeData? GetDefaultValueAttribute(IPropertySymbol property)
     {
-        return property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborDefaultValueAttribute");
+        return GetPropertyAttribute(property, "NCbor.NCborDefaultValueAttribute");
     }
 
     /// <summary>
@@ -471,8 +476,7 @@ internal static class SerializationCodeGenerator
     /// </summary>
     private static string? GetConverterType(IPropertySymbol property)
     {
-        var converterAttr = property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborConverterAttribute");
+        var converterAttr = GetPropertyAttribute(property, "NCbor.NCborConverterAttribute");
         if (converterAttr == null || converterAttr.ConstructorArguments.Length == 0)
             return null;
 
@@ -516,8 +520,7 @@ internal static class SerializationCodeGenerator
 
     private static bool HasEnumAsStringAttribute(IPropertySymbol property)
     {
-        return property.GetAttributes()
-            .Any(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborEnumAsStringAttribute");
+        return GetPropertyAttribute(property, "NCbor.NCborEnumAsStringAttribute") != null;
     }
 
     private static bool TryGetNullableEnumUnderlyingType(ITypeSymbol type, out ITypeSymbol? enumType)
@@ -552,23 +555,23 @@ internal static class SerializationCodeGenerator
         if (defaultValueAttr != null && defaultValueAttr.ConstructorArguments.Length > 0)
         {
             var literal = FormatDefaultValueLiteral(defaultValueAttr.ConstructorArguments[0]);
-            var typeName = property.Type.ToDisplayString();
-            return $"!System.Collections.Generic.EqualityComparer<{typeName}>.Default.Equals(value.{property.Name}, {literal})";
+            var typeName = TypeRef(property.Type);
+            return $"!global::System.Collections.Generic.EqualityComparer<{typeName}>.Default.Equals(value.{EscapeIdentifier(property.Name)}, {literal})";
         }
 
         var ignoreAttr = GetIgnoreAttribute(property);
         // No explicit [NCborIgnore] on the property: fall back to the context-wide default.
         var condition = ignoreAttr != null ? GetIgnoreCondition(ignoreAttr) : defaultIgnoreCondition;
-        var typeDisplayName = property.Type.ToDisplayString();
+        var typeDisplayName = TypeRef(property.Type);
         switch (condition)
         {
             case NCborIgnoreCondition.WhenWritingNull:
                 // Matches System.Text.Json: has no effect on non-nullable value types.
                 if (!CanBeNull(property.Type))
                     return null;
-                return $"value.{property.Name} != null";
+                return $"value.{EscapeIdentifier(property.Name)} != null";
             case NCborIgnoreCondition.WhenWritingDefault:
-                return $"!System.Collections.Generic.EqualityComparer<{typeDisplayName}>.Default.Equals(value.{property.Name}, default({typeDisplayName}))";
+                return $"!global::System.Collections.Generic.EqualityComparer<{typeDisplayName}>.Default.Equals(value.{EscapeIdentifier(property.Name)}, default({typeDisplayName}))";
             default:
                 // Always is filtered out by GetSerializableProperties; Never means always write.
                 return null;
@@ -595,7 +598,7 @@ internal static class SerializationCodeGenerator
         if (constant.Type is { TypeKind: TypeKind.Enum } enumType)
         {
             var numericLiteral = Convert.ToString(constant.Value, System.Globalization.CultureInfo.InvariantCulture) ?? "0";
-            return $"({enumType.ToDisplayString()}){numericLiteral}";
+            return $"({TypeRef(enumType)}){numericLiteral}";
         }
 
         return constant.Value switch
@@ -616,8 +619,7 @@ internal static class SerializationCodeGenerator
 
     private static string GetPropertyName(IPropertySymbol property, NCborNamingPolicy namingPolicy)
     {
-        var nameAttr = property.GetAttributes()
-            .FirstOrDefault(attr => attr.AttributeClass?.ToDisplayString() == "NCbor.NCborPropertyNameAttribute");
+        var nameAttr = GetPropertyAttribute(property, "NCbor.NCborPropertyNameAttribute");
 
         if (nameAttr != null && nameAttr.ConstructorArguments.Length > 0)
         {
@@ -627,15 +629,32 @@ internal static class SerializationCodeGenerator
         return ApplyNamingPolicy(property.Name, namingPolicy);
     }
 
-    private static string GeneratePropertySerialization(IPropertySymbol property)
+    private static string GeneratePropertySerialization(IPropertySymbol property, ContextTypeNames names)
     {
         var type = property.Type;
+        var access = $"value.{EscapeIdentifier(property.Name)}";
 
-        // A custom converter takes priority over every other dispatch rule.
+        // A custom converter takes priority over every other dispatch rule, null handling
+        // included: the converter receives the value as-is and decides how to encode null.
         var converterType = GetConverterType(property);
         if (converterType != null)
         {
-            return $"{GetConverterFieldName(converterType)}.Write(writer, value.{property.Name});";
+            return $"{GetConverterFieldName(converterType)}.Write(writer, {access}!);";
+        }
+
+        // Unsupported types that can't have a stub TypeInfo (dynamic, List<dynamic>, ...):
+        // a throwing helper call, so CBOR009 stays the only build error.
+        if (IsUnsupportedUnstubbableType(type))
+        {
+            return GenerateUnsupportedWrite(type);
+        }
+
+        // Unsupported types (CBOR009) dispatch to their throwing stub TypeInfo by their exact
+        // type name, bypassing the nullable branches below (which would e.g. emit
+        // ReadNullValue<T> for a Nullable<struct>), so the only build error is CBOR009 itself.
+        if (IsUnsupportedStubbedType(type))
+        {
+            return $"_context.{names.Get(type)}.Serialize(writer, {access}!, depth + 1);";
         }
 
         // [NCborEnumAsString] takes priority over the default numeric enum encoding.
@@ -643,71 +662,54 @@ internal static class SerializationCodeGenerator
         {
             if (type.TypeKind == TypeKind.Enum)
             {
-                return $"writer.WriteTextString(value.{property.Name}.ToString());";
+                return $"writer.WriteTextString({access}.ToString());";
             }
             if (TryGetNullableEnumUnderlyingType(type, out _))
             {
-                return $"if (value.{property.Name}.HasValue) {{ writer.WriteTextString(value.{property.Name}.Value.ToString()); }} else {{ writer.WriteNull(); }}";
+                return $"if ({access}.HasValue) {{ writer.WriteTextString({access}.Value.ToString()); }} else {{ writer.WriteNull(); }}";
             }
         }
 
-        // Handle byte[] / byte[]? as CBOR byte string (major type 2)
-        if (IsByteArray(type))
+        // Nullable<built-in>: the value or CBOR null.
+        if (TryGetNullableUnderlyingType(type, out var underlyingType) && IsBuiltInType(underlyingType!))
         {
-            if (type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
-            {
-                return $"if (value.{property.Name} != null) {{ {GenerateByteStringWrite($"value.{property.Name}")} }} else {{ writer.WriteNull(); }}";
-            }
-            return GenerateByteStringWrite($"value.{property.Name}");
+            return $"if ({access}.HasValue) {{ {GenerateDirectSerialization($"{access}.Value", underlyingType!)} }} else {{ writer.WriteNull(); }}";
         }
 
-        // Handle built-in types directly
-        if (IsBuiltInType(type))
+        var core = GenerateNonNullPropertyWrite(access, StripNullableAnnotation(type), names);
+
+        // Matches System.Text.Json: a null reference-type property is written as CBOR null
+        // whatever its nullable annotation says — a non-annotated `string` can still be null at
+        // runtime, and passing it on would crash (WriteTextString throws ArgumentNullException,
+        // a nested TypeInfo dereferences it). Flow analysis sees the null check, so the core
+        // call needs no `!`.
+        if (type.IsReferenceType)
         {
-            return GenerateDirectSerialization($"value.{property.Name}", type);
-        }
-        
-        // Handle arrays (including nullable arrays)
-        if (IsArray(type, out var arrayElementType))
-        {
-            if (arrayElementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid array type.");
-                
-            return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name}, depth + 1);";
+            return $"if ({access} is null) {{ writer.WriteNull(); }} else {{ {core} }}";
         }
 
-        // Handle nullable arrays
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&
-            IsArray(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated), out var nullableArrayElementType))
-        {
-            if (nullableArrayElementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid nullable array type.");
-
-            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}, depth + 1); }} else {{ writer.WriteNull(); }}";
-        }
-        
-        // Handle nullable built-in types
-        if (type is INamedTypeSymbol namedType && namedType.IsGenericType && 
-            namedType.Name == "Nullable" && namedType.TypeArguments.Length == 1)
-        {
-            var underlyingType = namedType.TypeArguments[0];
-            if (IsBuiltInType(underlyingType))
-            {
-                return $"if (value.{property.Name}.HasValue) {{ {GenerateDirectSerialization($"value.{property.Name}.Value", underlyingType)} }} else {{ writer.WriteNull(); }}";
-            }
-        }
-        
-        // Handle nullable reference types (like Dictionary<string, string>?)
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
-        {
-            return $"if (value.{property.Name} != null) {{ _context.{GetPropertyNameFromType(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated))}.Serialize(writer, value.{property.Name}, depth + 1); }} else {{ writer.WriteNull(); }}";
-        }
-
-        // Handle complex types via context reference
-        return $"_context.{GetPropertyNameFromType(type)}.Serialize(writer, value.{property.Name}, depth + 1);";
+        return core;
     }
 
-    private static string GeneratePropertyDeserialization(IPropertySymbol property)
+    /// <summary>Statement writing a property value already known to be non-null.</summary>
+    private static string GenerateNonNullPropertyWrite(string access, ITypeSymbol type, ContextTypeNames names)
+    {
+        // byte[] as a CBOR byte string (major type 2)
+        if (IsByteArray(type))
+        {
+            return GenerateByteStringWrite(access);
+        }
+
+        if (IsBuiltInType(type))
+        {
+            return GenerateDirectSerialization(access, type);
+        }
+
+        // Arrays, collections and plain objects go through the context property for their type.
+        return $"_context.{names.Get(type)}.Serialize(writer, {access}, depth + 1);";
+    }
+
+    private static string GeneratePropertyDeserialization(IPropertySymbol property, ContextTypeNames names)
     {
         var type = property.Type;
 
@@ -718,106 +720,100 @@ internal static class SerializationCodeGenerator
             return $"{GetConverterFieldName(converterType)}.Read(reader)";
         }
 
+        // See GeneratePropertySerialization.
+        if (IsUnsupportedUnstubbableType(type))
+        {
+            return GenerateUnsupportedRead(type);
+        }
+
+        if (IsUnsupportedStubbedType(type))
+        {
+            return $"_context.{names.Get(type)}.Deserialize(reader, depth + 1)";
+        }
+
         // [NCborEnumAsString] takes priority over the default numeric enum encoding.
         if (HasEnumAsStringAttribute(property))
         {
             if (type.TypeKind == TypeKind.Enum)
             {
-                var enumTypeName = type.ToDisplayString();
-                return $"({enumTypeName})System.Enum.Parse(typeof({enumTypeName}), reader.ReadTextString())";
+                var enumTypeName = TypeRef(type);
+                return $"({enumTypeName})global::System.Enum.Parse(typeof({enumTypeName}), reader.ReadTextString())";
             }
             if (TryGetNullableEnumUnderlyingType(type, out var nullableEnumType))
             {
-                var enumTypeName = nullableEnumType!.ToDisplayString();
-                return $"reader.PeekState() == CborReaderState.Null ? ReadNullEnum<{enumTypeName}>(reader) : ({enumTypeName})System.Enum.Parse(typeof({enumTypeName}), reader.ReadTextString())";
+                var enumTypeName = TypeRef(nullableEnumType!);
+                return $"reader.PeekState() == global::System.Formats.Cbor.CborReaderState.Null ? ReadNullEnum<{enumTypeName}>(reader) : ({enumTypeName})global::System.Enum.Parse(typeof({enumTypeName}), reader.ReadTextString())";
             }
         }
 
-        // Handle byte[] / byte[]? as CBOR byte string (major type 2)
+        // Nullable<built-in>
+        if (TryGetNullableUnderlyingType(type, out var underlyingType) && IsBuiltInType(underlyingType!))
+        {
+            // For enums, use inline null checking instead of helper methods
+            if (underlyingType!.TypeKind == TypeKind.Enum)
+            {
+                var enumDeserialization = GenerateDirectDeserialization(underlyingType);
+                return $"reader.PeekState() == global::System.Formats.Cbor.CborReaderState.Null ? ReadNullEnum<{TypeRef(underlyingType)}>(reader) : {enumDeserialization}";
+            }
+            return $"ReadNullable{underlyingType.Name}(reader)";
+        }
+
+        var nonNullableType = StripNullableAnnotation(type);
+        var core = GenerateNonNullPropertyRead(nonNullableType, names);
+
+        // Mirrors GeneratePropertySerialization: CBOR null reads back as null for every
+        // reference-type property. `!` because the target may be declared non-nullable — a null
+        // on the wire was written from a null value, so it round-trips (as in System.Text.Json).
+        if (type.IsReferenceType)
+        {
+            return $"(reader.PeekState() == global::System.Formats.Cbor.CborReaderState.Null ? ReadNullValue<{TypeRef(nonNullableType)}>(reader)! : {core})";
+        }
+
+        return core;
+    }
+
+    /// <summary>Expression reading a non-null property value.</summary>
+    private static string GenerateNonNullPropertyRead(ITypeSymbol type, ContextTypeNames names)
+    {
         if (IsByteArray(type))
         {
-            if (type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
-            {
-                return "reader.PeekState() == CborReaderState.Null ? ReadNullValue<byte[]>(reader) : reader.ReadByteString()";
-            }
             return "reader.ReadByteString()";
         }
 
-        // Handle built-in types directly
         if (IsBuiltInType(type))
         {
             return GenerateDirectDeserialization(type);
         }
-        
-        // Handle arrays (including nullable arrays)
-        if (IsArray(type, out var arrayElementType))
-        {
-            if (arrayElementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid array type.");
-                
-            return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader, depth + 1)";
-        }
 
-        // Handle nullable arrays
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated &&
-            IsArray(type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated), out var nullableArrayElementType))
-        {
-            if (nullableArrayElementType == null)
-                throw new InvalidOperationException("Element type cannot be null for a valid nullable array type.");
-
-            var nonNullableType = type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated);
-            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader, depth + 1)";
-        }
-        
-        // Handle nullable built-in types
-        if (type is INamedTypeSymbol namedType && namedType.IsGenericType && 
-            namedType.Name == "Nullable" && namedType.TypeArguments.Length == 1)
-        {
-            var underlyingType = namedType.TypeArguments[0];
-            if (IsBuiltInType(underlyingType))
-            {
-                // For enums, use inline null checking instead of helper methods
-                if (underlyingType.TypeKind == TypeKind.Enum)
-                {
-                    var enumDeserialization = GenerateDirectDeserialization(underlyingType);
-                    return $"reader.PeekState() == CborReaderState.Null ? ReadNullEnum<{underlyingType.ToDisplayString()}>(reader) : {enumDeserialization}";
-                }
-                return $"ReadNullable{underlyingType.Name}(reader)";
-            }
-        }
-        
-        // Handle nullable reference types (like Dictionary<string, string>?)
-        if (type.CanBeReferencedByName && type.NullableAnnotation == Microsoft.CodeAnalysis.NullableAnnotation.Annotated)
-        {
-            var nonNullableType = type.WithNullableAnnotation(Microsoft.CodeAnalysis.NullableAnnotation.NotAnnotated);
-            return $"reader.PeekState() == CborReaderState.Null ? ReadNullValue<{nonNullableType.ToDisplayString()}>(reader) : _context.{GetPropertyNameFromType(nonNullableType)}.Deserialize(reader, depth + 1)";
-        }
-
-        // Handle complex types via context reference
-        return $"_context.{GetPropertyNameFromType(type)}.Deserialize(reader, depth + 1)";
+        return $"_context.{names.Get(type)}.Deserialize(reader, depth + 1)";
     }
 
+    /// <summary>
+    /// True for every array-shaped collection in the <see cref="TryGetCollectionInfo"/> table —
+    /// list-like <i>and</i> set-like (<c>HashSet&lt;T&gt;</c>, <c>ISet&lt;T&gt;</c>, ...), so callers such
+    /// as <c>IsPlainObjectType</c> never treat a set as a POCO (CBOR005 on its <c>Count</c>).
+    /// </summary>
     private static bool IsList(ITypeSymbol typeSymbol, out ITypeSymbol? elementType)
     {
-        elementType = null;
-        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "List" && namedType.TypeArguments.Length == 1)
+        if (TryGetCollectionInfo(typeSymbol, out var info) && info.Kind != CollectionKind.Dictionary)
         {
-            elementType = namedType.TypeArguments[0];
+            elementType = info.ElementType;
             return true;
         }
+        elementType = null;
         return false;
     }
 
     private static bool IsDictionary(ITypeSymbol typeSymbol, out ITypeSymbol? keyType, out ITypeSymbol? valueType)
     {
-        keyType = null;
-        valueType = null;
-        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType && namedType.Name == "Dictionary" && namedType.TypeArguments.Length == 2)
+        if (TryGetCollectionInfo(typeSymbol, out var info) && info.Kind == CollectionKind.Dictionary)
         {
-            keyType = namedType.TypeArguments[0];
-            valueType = namedType.TypeArguments[1];
+            keyType = info.KeyType;
+            valueType = info.ValueType;
             return true;
         }
+        keyType = null;
+        valueType = null;
         return false;
     }
 
@@ -834,27 +830,77 @@ internal static class SerializationCodeGenerator
 
     private static bool IsByteArray(ITypeSymbol typeSymbol)
     {
-        return typeSymbol is IArrayTypeSymbol arrayType && arrayType.ElementType.SpecialType == SpecialType.System_Byte;
+        return typeSymbol is IArrayTypeSymbol arrayType && arrayType.Rank == 1 && arrayType.ElementType.SpecialType == SpecialType.System_Byte;
     }
 
-    private static string GetPropertyNameFromType(ITypeSymbol typeSymbol)
+    /// <summary>
+    /// The <i>simple</i> context property name for a type (<c>Item</c>, <c>ListOfItem</c>,
+    /// <c>ArrayOfInt32</c>). Distinct types can share it (same simple name in two namespaces), so
+    /// generated code never emits it directly: discovery assigns each type its final, unique name
+    /// (see <see cref="ContextTypeNames"/>), starting from this one.
+    /// </summary>
+    internal static string GetPropertyNameFromType(ITypeSymbol typeSymbol) =>
+        BuildContextPropertyName(typeSymbol, qualificationLevel: 0, qualifyFramework: false);
+
+    /// <summary>
+    /// Builds a context property name. Each named type in <paramref name="typeSymbol"/> — the type
+    /// itself, its type arguments, array element types — is prefixed with up to
+    /// <paramref name="qualificationLevel"/> of its nearest containing types / namespaces
+    /// (<c>B_Item</c>, <c>OuterOfString_Inner</c>), joined with '_'. Primitives, string, Guid,
+    /// DateTime, DateTimeOffset and decimal are never qualified (enums are, like any user type);
+    /// framework types only when <paramref name="qualifyFramework"/> is set, so that
+    /// <c>List&lt;B.Item&gt;</c> reads <c>ListOfB_Item</c> rather than <c>Generic_ListOfB_Item</c>.
+    /// </summary>
+    internal static string BuildContextPropertyName(ITypeSymbol typeSymbol, int qualificationLevel, bool qualifyFramework)
     {
-        // Handle arrays
+        // Handle arrays (multi-dimensional ones carry their rank so int[,] != int[])
         if (typeSymbol is IArrayTypeSymbol arrayType)
         {
-            return $"ArrayOf{GetPropertyNameFromType(arrayType.ElementType)}";
+            var rankPart = arrayType.Rank == 1 ? "" : $"Rank{arrayType.Rank}";
+            return $"Array{rankPart}Of{BuildContextPropertyName(arrayType.ElementType, qualificationLevel, qualifyFramework)}";
         }
-        
-        if (typeSymbol is INamedTypeSymbol namedType && namedType.IsGenericType)
-        {
-            var name = namedType.Name;
-            int backtickIndex = name.IndexOf('`');
-            if (backtickIndex >= 0)
-                name = name.Substring(0, backtickIndex);
-            name += "Of" + string.Join("And", namedType.TypeArguments.Select(GetPropertyNameFromType));
-            return name;
-        }
-        
+
+        if (GetBuiltInPropertyName(typeSymbol) is { } builtInName)
+            return builtInName;
+
+        if (typeSymbol is not INamedTypeSymbol namedType)
+            return typeSymbol.Name;
+
+        var ownSegment = GetNameSegment(namedType, qualificationLevel, qualifyFramework);
+        if (qualificationLevel == 0 || (!qualifyFramework && IsFrameworkMetadataType(namedType)))
+            return ownSegment;
+
+        // Nearest container first: containing types (with their type arguments), then namespaces.
+        var containers = new List<string>();
+        for (var containing = namedType.ContainingType; containing != null; containing = containing.ContainingType)
+            containers.Add(GetNameSegment(containing, qualificationLevel, qualifyFramework));
+        for (var ns = namedType.ContainingNamespace; ns != null && !ns.IsGlobalNamespace; ns = ns.ContainingNamespace)
+            containers.Add(ns.Name);
+
+        var taken = containers.Take(qualificationLevel).Reverse().ToList();
+        taken.Add(ownSegment);
+        return string.Join("_", taken);
+    }
+
+    /// <summary>
+    /// <c>Name</c>, or <c>NameOfArg1AndArg2</c> for a type with type arguments of its own. A type
+    /// nested in a generic one (<c>Outer&lt;int&gt;.Inner</c>) has <c>IsGenericType</c> set but no
+    /// type arguments, and is just <c>Inner</c> (not <c>InnerOf</c>).
+    /// </summary>
+    private static string GetNameSegment(INamedTypeSymbol namedType, int qualificationLevel, bool qualifyFramework)
+    {
+        var name = namedType.Name;
+        var backtickIndex = name.IndexOf('`');
+        if (backtickIndex >= 0)
+            name = name.Substring(0, backtickIndex);
+        if (namedType.TypeArguments.Length > 0)
+            name += "Of" + string.Join("And", namedType.TypeArguments.Select(a => BuildContextPropertyName(a, qualificationLevel, qualifyFramework)));
+        return name;
+    }
+
+    /// <summary>The fixed context property name of a built-in type, or null.</summary>
+    private static string? GetBuiltInPropertyName(ITypeSymbol typeSymbol)
+    {
         // Handle built-in types specially - they don't need context references
         var specialTypeName = typeSymbol.SpecialType switch
         {
@@ -896,11 +942,11 @@ internal static class SerializationCodeGenerator
         {
             return "Decimal";
         }
-        
-        return typeSymbol.Name;
+
+        return null;
     }
 
-    private static bool IsBuiltInType(ITypeSymbol typeSymbol)
+    internal static bool IsBuiltInType(ITypeSymbol typeSymbol)
     {
         // Handle special types
         var isSpecialType = typeSymbol.SpecialType switch
@@ -958,7 +1004,7 @@ internal static class SerializationCodeGenerator
                "writer.WriteStartIndefiniteLengthByteString(); " +
                $"for (int __chunkOffset = 0; __chunkOffset < {variableName}.Length; __chunkOffset += {ByteStringChunkThreshold}) " +
                "{ " +
-               $"writer.WriteByteString(new System.ReadOnlySpan<byte>({variableName}, __chunkOffset, System.Math.Min({ByteStringChunkThreshold}, {variableName}.Length - __chunkOffset))); " +
+               $"writer.WriteByteString(new global::System.ReadOnlySpan<byte>({variableName}, __chunkOffset, global::System.Math.Min({ByteStringChunkThreshold}, {variableName}.Length - __chunkOffset))); " +
                "} " +
                "writer.WriteEndIndefiniteLengthByteString(); " +
                "} " +
@@ -996,12 +1042,12 @@ internal static class SerializationCodeGenerator
         
         if (displayString == "System.DateTime")
         {
-            return $"writer.WriteTag(System.Formats.Cbor.CborTag.DateTimeString); writer.WriteTextString(({variableName}.Kind == System.DateTimeKind.Unspecified ? System.DateTime.SpecifyKind({variableName}, System.DateTimeKind.Utc) : {variableName}).ToUniversalTime().ToString(\"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture));"; 
+            return $"writer.WriteTag(global::System.Formats.Cbor.CborTag.DateTimeString); writer.WriteTextString(({variableName}.Kind == global::System.DateTimeKind.Unspecified ? global::System.DateTime.SpecifyKind({variableName}, global::System.DateTimeKind.Utc) : {variableName}).ToUniversalTime().ToString(\"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", global::System.Globalization.CultureInfo.InvariantCulture));"; 
         }
         
         if (displayString == "System.DateTimeOffset")
         {
-            return $"writer.WriteTag(System.Formats.Cbor.CborTag.DateTimeString); writer.WriteTextString({variableName}.ToString(\"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture));"; 
+            return $"writer.WriteTag(global::System.Formats.Cbor.CborTag.DateTimeString); writer.WriteTextString({variableName}.ToString(\"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", global::System.Globalization.CultureInfo.InvariantCulture));"; 
         }
         
         if (displayString == "System.Decimal" || displayString == "decimal")
@@ -1063,17 +1109,17 @@ internal static class SerializationCodeGenerator
         var displayString = typeSymbol.ToDisplayString();
         if (displayString == "System.Guid")
         {
-            return "new System.Guid(reader.ReadByteString())";
+            return "new global::System.Guid(reader.ReadByteString())";
         }
         
         if (displayString == "System.DateTime")
         {
-            return "System.DateTime.ParseExact(reader.ReadTag() == System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)";
+            return "global::System.DateTime.ParseExact(reader.ReadTag() == global::System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new global::System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", global::System.Globalization.CultureInfo.InvariantCulture, global::System.Globalization.DateTimeStyles.RoundtripKind)";
         }
         
         if (displayString == "System.DateTimeOffset")
         {
-            return "System.DateTimeOffset.ParseExact(reader.ReadTag() == System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)";
+            return "global::System.DateTimeOffset.ParseExact(reader.ReadTag() == global::System.Formats.Cbor.CborTag.DateTimeString ? reader.ReadTextString() : throw new global::System.InvalidOperationException(\"Expected DateTimeString tag\"), \"yyyy-MM-ddTHH:mm:ss.FFFFFFFK\", global::System.Globalization.CultureInfo.InvariantCulture, global::System.Globalization.DateTimeStyles.RoundtripKind)";
         }
         
         if (displayString == "System.Decimal" || displayString == "decimal")
@@ -1087,7 +1133,7 @@ internal static class SerializationCodeGenerator
             if (typeSymbol is INamedTypeSymbol namedEnum)
             {
                 var underlyingType = namedEnum.EnumUnderlyingType;
-                var enumTypeName = typeSymbol.ToDisplayString();
+                var enumTypeName = TypeRef(typeSymbol);
                 if (underlyingType != null)
                 {
                     return underlyingType.SpecialType switch
@@ -1104,7 +1150,7 @@ internal static class SerializationCodeGenerator
                     };
                 }
             }
-            return $"({typeSymbol.ToDisplayString()})reader.ReadInt32()"; // Fallback
+            return $"({TypeRef(typeSymbol)})reader.ReadInt32()"; // Fallback
         }
         
         return $"// TODO: Implement direct deserialization for {typeSymbol.ToDisplayString()}";

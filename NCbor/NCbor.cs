@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.IO.Pipelines;
 
 namespace NCbor;
 
@@ -35,7 +36,16 @@ public static class NCborSerializer
         if (typeInfo == null)
             throw new ArgumentNullException(nameof(typeInfo));
 
-        return WriteValue(value, typeInfo).Encode();
+        CborWriter cborWriter = RentWriter();
+        try
+        {
+            WriteValue(cborWriter, value, typeInfo);
+            return cborWriter.Encode();
+        }
+        finally
+        {
+            ReturnWriter(cborWriter);
+        }
     }
 
     /// <summary>
@@ -55,10 +65,59 @@ public static class NCborSerializer
         if (typeInfo == null)
             throw new ArgumentNullException(nameof(typeInfo));
 
-        var cborWriter = WriteValue(value, typeInfo);
-        var span = writer.GetSpan(cborWriter.BytesWritten);
-        int written = cborWriter.Encode(span);
-        writer.Advance(written);
+        CborWriter cborWriter = RentWriter();
+        try
+        {
+            WriteValue(cborWriter, value, typeInfo);
+            Span<byte> span = writer.GetSpan(cborWriter.BytesWritten);
+            int written = cborWriter.Encode(span);
+            writer.Advance(written);
+        }
+        finally
+        {
+            ReturnWriter(cborWriter);
+        }
+    }
+
+    /// <summary>
+    /// Serializes the specified value as CBOR straight into <paramref name="pipeWriter"/>'s memory and flushes it.
+    /// </summary>
+    /// <typeparam name="T">The type of the value to serialize.</typeparam>
+    /// <param name="pipeWriter">The pipe to write to (e.g. ASP.NET Core's <c>HttpResponse.BodyWriter</c>). It is
+    /// flushed, not completed.</param>
+    /// <param name="value">The value to serialize.</param>
+    /// <param name="typeInfo">The type information for serialization.</param>
+    /// <param name="cancellationToken">A token that may be used to cancel the flush.</param>
+    /// <returns>A task that completes when the pipe has been flushed (honoring the pipe's backpressure).</returns>
+    /// <remarks>
+    /// The payload is encoded synchronously and copied once into the pipe's own buffer — no intermediate array or
+    /// stream adapter. <see cref="CborWriter"/> is not incremental, so the whole payload is materialized before the
+    /// flush; backpressure applies at the flush, not chunk-by-chunk. If the flush is canceled, the payload has
+    /// already been committed to the pipe (same as <c>System.Text.Json</c>); only waiting for the reader stops.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="pipeWriter"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="NCborSerializationException">Thrown when serialization fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is canceled or the flush is canceled.</exception>
+    public static Task SerializeAsync<T>(PipeWriter pipeWriter, T value, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
+    {
+        if (pipeWriter == null)
+            throw new ArgumentNullException(nameof(pipeWriter));
+        if (typeInfo == null)
+            throw new ArgumentNullException(nameof(typeInfo));
+
+        return SerializeToPipeCore(pipeWriter, value, typeInfo, cancellationToken);
+    }
+
+    private static async Task SerializeToPipeCore<T>(PipeWriter pipeWriter, T value, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Encode synchronously; the pooled CborWriter is returned before the await below.
+        Serialize((IBufferWriter<byte>)pipeWriter, value, typeInfo);
+
+        FlushResult result = await pipeWriter.FlushAsync(cancellationToken).ConfigureAwait(false);
+        if (result.IsCanceled)
+            throw new OperationCanceledException("The pipe flush was canceled.", cancellationToken);
     }
 
     /// <summary>
@@ -77,11 +136,9 @@ public static class NCborSerializer
         if (typeInfo == null)
             throw new ArgumentNullException(nameof(typeInfo));
 
-        var cborWriter = WriteValue(value, typeInfo);
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(cborWriter.BytesWritten);
+        byte[] buffer = EncodeToPooledArray(value, typeInfo, out int written);
         try
         {
-            int written = cborWriter.Encode(buffer);
             stream.Write(buffer, 0, written);
         }
         finally
@@ -120,11 +177,10 @@ public static class NCborSerializer
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var cborWriter = WriteValue(value, typeInfo);
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(cborWriter.BytesWritten);
+        // Encode synchronously; the pooled CborWriter is returned before the await below.
+        byte[] buffer = EncodeToPooledArray(value, typeInfo, out int written);
         try
         {
-            int written = cborWriter.Encode(buffer);
             await stream.WriteAsync(buffer, 0, written, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -240,20 +296,150 @@ public static class NCborSerializer
         return ReadValue(AsMemory(buffer), typeInfo);
     }
 
+    /// <summary>
+    /// Asynchronously deserializes a value from CBOR data read from <paramref name="pipeReader"/>.
+    /// </summary>
+    /// <typeparam name="T">The type of the value to deserialize.</typeparam>
+    /// <param name="pipeReader">The pipe to read from (e.g. ASP.NET Core's <c>HttpRequest.BodyReader</c>). It is
+    /// read until the writer completes, and everything read is consumed — including on failure, e.g. trailing data
+    /// after the top-level value. The reader itself is not completed.</param>
+    /// <param name="typeInfo">The type information for deserialization.</param>
+    /// <param name="cancellationToken">A token that may be used to cancel the read.</param>
+    /// <returns>A value task whose result is the deserialized value.</returns>
+    /// <remarks>
+    /// <see cref="CborReader"/> needs the whole document in contiguous memory, so the pipe is read to completion and
+    /// copied once into an array owned by this call before decoding (the pipe's segments are released immediately,
+    /// and nothing a converter keeps can alias pipe-owned memory).
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="pipeReader"/> or <paramref name="typeInfo"/> is null.</exception>
+    /// <exception cref="NCborValidationException">Thrown when the pipe contains no data or CBOR data validation fails.</exception>
+    /// <exception cref="NCborDeserializationException">Thrown when deserialization fails.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is canceled or the read is canceled.</exception>
+    public static ValueTask<T> DeserializeAsync<T>(PipeReader pipeReader, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken = default)
+    {
+        if (pipeReader == null)
+            throw new ArgumentNullException(nameof(pipeReader));
+        if (typeInfo == null)
+            throw new ArgumentNullException(nameof(typeInfo));
+
+        return DeserializeFromPipeCore(pipeReader, typeInfo, cancellationToken);
+    }
+
+    private static async ValueTask<T> DeserializeFromPipeCore<T>(PipeReader pipeReader, NCborTypeInfo<T> typeInfo, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            ReadResult result = await pipeReader.ReadAsync(cancellationToken).ConfigureAwait(false);
+            System.Buffers.ReadOnlySequence<byte> buffer = result.Buffer;
+
+            if (result.IsCanceled)
+            {
+                pipeReader.AdvanceTo(buffer.Start);
+                throw new OperationCanceledException("The pipe read was canceled.", cancellationToken);
+            }
+
+            if (result.IsCompleted)
+            {
+                // Copy before AdvanceTo: after it, the pipe may reuse these segments.
+                byte[] data = buffer.ToArray();
+                pipeReader.AdvanceTo(buffer.End);
+                return ReadValue(data, typeInfo);
+            }
+
+            // Not complete yet: consume nothing, mark everything examined, wait for more.
+            pipeReader.AdvanceTo(buffer.Start, buffer.End);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Per-thread CborWriter / CborReader reuse.
+    //
+    // A fresh CborWriter costs ~1.8 KB per call (its internal buffer) and a fresh CborReader ~0.7 KB; reusing one
+    // per thread brings both to ~0. Rules that keep this safe:
+    //   * Rent by taking the instance out of the slot, so a re-entrant call (e.g. a converter that calls
+    //     NCborSerializer itself) gets its own instance instead of sharing one mid-document.
+    //   * Always return in a finally, and never hold a rented instance across an await.
+    //   * Don't keep writers whose buffer grew past MaxRetainedWriterBytes, so one large payload doesn't pin
+    //     memory for the thread's lifetime.
+    //   * Readers are reset to empty on return so the slot never references the caller's data.
+    // A retained writer keeps its buffer capacity (up to ~1 MB per thread) but CborWriter.Reset() clears the
+    // contents, so no previous payload bytes linger.
+    // ------------------------------------------------------------------
+
+    private const int MaxRetainedWriterBytes = 1024 * 1024;
+
+    [ThreadStatic] private static CborWriter? t_cachedWriter;
+    [ThreadStatic] private static CborReader? t_cachedReader;
+
+    private static CborWriter RentWriter()
+    {
+        CborWriter? writer = t_cachedWriter;
+        if (writer == null)
+            return new CborWriter();
+
+        t_cachedWriter = null;
+        writer.Reset();
+        return writer;
+    }
+
+    private static void ReturnWriter(CborWriter writer)
+    {
+        if (writer.BytesWritten > MaxRetainedWriterBytes)
+            return;
+
+        writer.Reset();
+        t_cachedWriter = writer;
+    }
+
+    private static CborReader RentReader(ReadOnlyMemory<byte> data)
+    {
+        CborReader? reader = t_cachedReader;
+        if (reader == null)
+            return new CborReader(data);
+
+        t_cachedReader = null;
+        reader.Reset(data);
+        return reader;
+    }
+
+    private static void ReturnReader(CborReader reader)
+    {
+        reader.Reset(ReadOnlyMemory<byte>.Empty);
+        t_cachedReader = reader;
+    }
+
+    /// <summary>
+    /// Encodes <paramref name="value"/> into an <see cref="ArrayPool{T}"/> array (caller returns it, cleared).
+    /// The pooled writer is released before this returns, so callers may await afterwards.
+    /// </summary>
+    private static byte[] EncodeToPooledArray<T>(T value, NCborTypeInfo<T> typeInfo, out int written)
+    {
+        CborWriter cborWriter = RentWriter();
+        try
+        {
+            WriteValue(cborWriter, value, typeInfo);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(cborWriter.BytesWritten);
+            written = cborWriter.Encode(buffer);
+            return buffer;
+        }
+        finally
+        {
+            ReturnWriter(cborWriter);
+        }
+    }
+
     // ------------------------------------------------------------------
     // Shared cores: all exception mapping lives here.
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Runs the generated serializer into a fresh <see cref="CborWriter"/> and guarantees the returned writer
-    /// holds a complete CBOR document, so callers can encode it (to an array, span, or stream) outside the
-    /// exception-mapping region.
+    /// Runs the generated serializer into <paramref name="writer"/> and guarantees it then holds a complete CBOR
+    /// document, so callers can encode it (to an array, span, or stream) outside the exception-mapping region.
     /// </summary>
-    private static CborWriter WriteValue<T>(T value, NCborTypeInfo<T> typeInfo)
+    private static void WriteValue<T>(CborWriter writer, T value, NCborTypeInfo<T> typeInfo)
     {
         try
         {
-            var writer = new CborWriter();
             typeInfo.Serialize(writer, value);
             if (!writer.IsWriteCompleted)
             {
@@ -261,7 +447,6 @@ public static class NCborSerializer
                 // mapped below exactly as it was when Encode() lived inside this try block.
                 writer.Encode();
             }
-            return writer;
         }
         catch (NCborSerializationException)
         {
@@ -286,9 +471,9 @@ public static class NCborSerializer
         if (data.Length == 0)
             throw new NCborValidationException("CBOR data cannot be empty");
 
+        CborReader reader = RentReader(data);
         try
         {
-            var reader = new CborReader(data);
             var result = typeInfo.Deserialize(reader);
             if (reader.BytesRemaining > 0)
             {
@@ -327,6 +512,10 @@ public static class NCborSerializer
         catch (Exception ex)
         {
             throw new NCborDeserializationException(typeof(T), $"Unexpected error during deserialization: {ex.Message}", ex);
+        }
+        finally
+        {
+            ReturnReader(reader);
         }
     }
 

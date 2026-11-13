@@ -1,7 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>netstandard2.0</TargetFramework>
+		<!-- netstandard2.0 for reach; net10.0 so modern apps get ValueTask and System.IO.Pipelines from the
+		     framework instead of polyfill packages. Keep logic free of #if: tests run against net10.0 only. -->
+		<TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<LangVersion>latest</LangVersion>
@@ -23,8 +25,12 @@
 
 	<ItemGroup>
 		<PackageReference Include="System.Formats.Cbor" />
-		<!-- ValueTask<T> for DeserializeAsync on netstandard2.0 (same dependency System.Text.Json takes). -->
+	</ItemGroup>
+
+	<!-- In-box on net10.0; polyfill packages only for netstandard2.0 (same dependencies System.Text.Json takes). -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
 		<PackageReference Include="System.Threading.Tasks.Extensions" />
+		<PackageReference Include="System.IO.Pipelines" />
 	</ItemGroup>
 
 	<ItemGroup>

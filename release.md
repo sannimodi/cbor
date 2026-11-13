@@ -47,9 +47,10 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 ### Packaging Metadata (already configured, as of 2026-07-04)
 
 Both `NCbor.csproj` and `NCbor.Generator.csproj` already carry `PackageId`/`Version`/`Authors`/
-`Description`/`PackageLicenseExpression`/`PackageProjectUrl`/`PackageReadmeFile`. **Confirm
-`Authors` and `Version` match what you actually want before publishing** — `Authors` currently
-defaults to the GitHub org name as a placeholder.
+`Description`/`PackageLicenseExpression`/`PackageProjectUrl`/`PackageReadmeFile`. `Authors` is
+`Sanni Modi` and both URLs point at https://github.com/sannimodi/cbor (settled 2026-11-13). Bump
+`Version` before each publish. Package versions for every project live in `Directory.Packages.props`
+(central package management).
 
 The generator project packs its DLL as an analyzer, not a normal library reference. The
 previous version of this doc described a nonexistent `<IncludeAnalyzer>true</IncludeAnalyzer>`

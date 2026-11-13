@@ -7,25 +7,24 @@
 		<LangVersion>latest</LangVersion>
 	</PropertyGroup>
 
-	<!-- Packaging metadata (GAPS.md GAP-12): prepared so `dotnet pack` produces a usable package.
-	     Nobody has run `dotnet nuget push` yet — confirm Authors/Version below before publishing. -->
+	<!-- Packaging metadata (GAPS.md GAP-12): `dotnet pack` produces a publishable package. -->
 	<PropertyGroup>
 		<PackageId>NCbor</PackageId>
 		<Version>1.0.0</Version>
-		<Authors>atcults</Authors>
+		<Authors>Sanni Modi</Authors>
 		<Description>AOT-compatible, reflection-free CBOR serialization for .NET using Roslyn source generators, following System.Text.Json's patterns. Requires the companion NCbor.Generator package.</Description>
 		<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-		<PackageProjectUrl>https://github.com/atcults/cbor</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/atcults/cbor</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/sannimodi/cbor</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/sannimodi/cbor</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>cbor;serialization;source-generator;aot;system.formats.cbor</PackageTags>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="System.Formats.Cbor" Version="10.0.15" />
+		<PackageReference Include="System.Formats.Cbor" />
 		<!-- ValueTask<T> for DeserializeAsync on netstandard2.0 (same dependency System.Text.Json takes). -->
-		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
+		<PackageReference Include="System.Threading.Tasks.Extensions" />
 	</ItemGroup>
 
 	<ItemGroup>

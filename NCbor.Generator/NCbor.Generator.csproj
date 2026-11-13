@@ -9,18 +9,17 @@
 		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
 	</PropertyGroup>
 
-	<!-- Packaging metadata (GAPS.md GAP-12): prepared so `dotnet pack` produces a usable package.
-	     Nobody has run `dotnet nuget push` yet — confirm Authors/Version below before publishing.
+	<!-- Packaging metadata (GAPS.md GAP-12): `dotnet pack` produces a publishable package.
 	     IncludeBuildOutput=false + the analyzers/dotnet/cs None item below is the standard pattern
 	     for packing a Roslyn source generator as a NuGet analyzer (not a normal lib reference). -->
 	<PropertyGroup>
 		<PackageId>NCbor.Generator</PackageId>
 		<Version>1.0.0</Version>
-		<Authors>atcults</Authors>
+		<Authors>Sanni Modi</Authors>
 		<Description>Roslyn incremental source generator that produces AOT-friendly CBOR serialization code for types registered with NCborSerializerContext. Companion package to NCbor; installs as an analyzer with no explicit ProjectReference needed.</Description>
 		<PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
-		<PackageProjectUrl>https://github.com/atcults/cbor</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/atcults/cbor</RepositoryUrl>
+		<PackageProjectUrl>https://github.com/sannimodi/cbor</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/sannimodi/cbor</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>cbor;serialization;source-generator;roslyn;analyzer</PackageTags>
 		<DevelopmentDependency>true</DevelopmentDependency>
@@ -35,8 +34,8 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" PrivateAssets="all" />
-		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="4.14.0" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+		<PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
 	</ItemGroup>
 
 	<ItemGroup>

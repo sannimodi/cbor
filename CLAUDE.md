@@ -88,6 +88,7 @@ For new type support, use the **experimental validation first** approach:
 ## Key Technical Details
 
 - **netstandard2.0** for library and generator (broad compatibility); **net10.0** for tests and demos
+- Package versions are centrally managed in `Directory.Packages.props` — add `<PackageReference Include="X" />` without a `Version` in project files. `System.Formats.Cbor` deliberately stays on the lowest safe 10.0.x (currently 10.0.15, the CVE-2026-118747 fix); don't take major bumps just because they exist.
 - `System.Formats.Cbor` handles all CBOR encoding — the generator emits `CborWriter`/`CborReader` calls
 - `IsBuiltInType()` lives in `SerializationCodeGenerator.cs`; `NCborSourceGenerator.cs`'s copy is a one-line delegation, so update only the former. Also remove the type from the CBOR009 unsupported list (`SerializationCodeGenerator.Collections.cs`) when you add support for it.
 - Type names like `"System.Decimal"` may appear as `"decimal"` in some Roslyn contexts — always check both forms

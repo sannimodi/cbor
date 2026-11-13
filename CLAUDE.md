@@ -32,7 +32,7 @@ dotnet run --project NCborSample
 
 ### Solution Structure
 
-- **NCbor/** — Runtime library (targets `netstandard2.0`). Public API: `NCborSerializer` static class, `NCborSerializerContext` base class, `NCborTypeInfo<T>`, attributes, and custom exceptions.
+- **NCbor/** — Runtime library (targets `netstandard2.0;net10.0`; keep logic free of `#if` — tests only exercise net10.0). Public API: `NCborSerializer` static class, `NCborSerializerContext` base class, `NCborTypeInfo<T>`, attributes, and custom exceptions.
 - **NCbor.Generator/** — Roslyn incremental source generator (targets `netstandard2.0`). Scans for `[NCborSerializable]` on partial context classes and generates `{Namespace}.{Context}.g.cs` files.
 - **NCbor.Tests/** — xUnit runtime round-trip tests (targets `net10.0`). Uses FluentAssertions.
 - **NCbor.Generator.Tests/** — generator tests via `CSharpGeneratorDriver` (targets `net10.0`). `GeneratorHarness.Run(source)` returns generator diagnostics, generated sources and final-compilation diagnostics; `GeneratorHarness.AssertCompilesCleanly(source)` fails on generator exceptions, generator errors, or any compile error. Use it to test diagnostics and "this model shape compiles" — anything a runtime test can't express.
@@ -87,7 +87,8 @@ For new type support, use the **experimental validation first** approach:
 
 ## Key Technical Details
 
-- **netstandard2.0** for library and generator (broad compatibility); **net10.0** for tests and demos
+- **netstandard2.0;net10.0** for the library, **netstandard2.0** for the generator (Roslyn requirement); **net10.0** for tests and demos
+- `NCborSerializer` reuses one `CborWriter`/`CborReader` per thread (`RentWriter`/`ReturnWriter`, `RentReader`/`ReturnReader`): rent by clearing the `[ThreadStatic]` slot, return in `finally`, never hold one across an `await`, and never hand the reader pooled or pipe-owned memory (a converter may keep a slice of it).
 - Package versions are centrally managed in `Directory.Packages.props` — add `<PackageReference Include="X" />` without a `Version` in project files. `System.Formats.Cbor` deliberately stays on the lowest safe 10.0.x (currently 10.0.15, the CVE-2026-118747 fix); don't take major bumps just because they exist.
 - `System.Formats.Cbor` handles all CBOR encoding — the generator emits `CborWriter`/`CborReader` calls
 - `IsBuiltInType()` lives in `SerializationCodeGenerator.cs`; `NCborSourceGenerator.cs`'s copy is a one-line delegation, so update only the former. Also remove the type from the CBOR009 unsupported list (`SerializationCodeGenerator.Collections.cs`) when you add support for it.

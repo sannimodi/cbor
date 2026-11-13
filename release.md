@@ -16,7 +16,7 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/yourusername/cbor.git
+   git clone https://github.com/sannimodi/cbor.git
    cd cbor
    ```
 
@@ -32,14 +32,14 @@ This project provides a .NET library for CBOR (Concise Binary Object Representat
   ```xml
   <ItemGroup>
       <ProjectReference Include="..\NCbor\NCbor.csproj" />
-      <Analyzer Include="..\NCbor.Generator\bin\Debug\netstandard2.0\NCbor.Generator.dll" />
+      <ProjectReference Include="..\NCbor.Generator\NCbor.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   ```
 
 ### Why Explicit Analyzer Reference is Needed
 
 - When developing locally, the source generator is not automatically included as an analyzer.
-- You must explicitly add the generator DLL as an analyzer to ensure it runs during the build process.
+- Reference the generator project with `OutputItemType="Analyzer"` and `ReferenceOutputAssembly="false"` so it runs as an analyzer (always built in the right configuration) instead of being linked as a normal assembly. Pointing an `<Analyzer>` item at a `bin/Debug` DLL breaks Release builds and clean clones.
 - This is different from NuGet packages, where analyzers are automatically included.
 
 ## NuGet Packaging

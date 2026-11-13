@@ -328,7 +328,7 @@ We welcome contributions! Please follow these steps:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/cbor.git
+git clone https://github.com/sannimodi/cbor.git
 
 # Build the solution (.NET 10 required)
 dotnet build

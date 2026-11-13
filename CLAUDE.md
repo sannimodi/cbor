@@ -33,7 +33,7 @@ dotnet run --project NCborSample
 ### Solution Structure
 
 - **NCbor/** — Runtime library (targets `netstandard2.0`). Public API: `NCborSerializer` static class, `NCborSerializerContext` base class, `NCborTypeInfo<T>`, attributes, and custom exceptions.
-- **NCbor.Generator/** — Roslyn incremental source generator (targets `netstandard2.0`). Scans for `[NCborSerializable]` on partial context classes and generates `{Context}.g.cs` files.
+- **NCbor.Generator/** — Roslyn incremental source generator (targets `netstandard2.0`). Scans for `[NCborSerializable]` on partial context classes and generates `{Namespace}.{Context}.g.cs` files.
 - **NCbor.Tests/** — xUnit runtime round-trip tests (targets `net10.0`). Uses FluentAssertions.
 - **NCbor.Generator.Tests/** — generator tests via `CSharpGeneratorDriver` (targets `net10.0`). `GeneratorHarness.Run(source)` returns generator diagnostics, generated sources and final-compilation diagnostics; `GeneratorHarness.AssertCompilesCleanly(source)` fails on generator exceptions, generator errors, or any compile error. Use it to test diagnostics and "this model shape compiles" — anything a runtime test can't express.
 - **NCbor.Demo/** — Console demo app (targets `net10.0`).
@@ -101,9 +101,9 @@ For new type support, use the **experimental validation first** approach:
 `GAPS.md` at the repo root is the maintained, non-aspirational checklist of what's actually
 implemented vs. stubbed vs. missing — it exists because README.md/roadmap.md/
 cbor-serialization-specs.md have previously described unimplemented behavior as done. Before
-stating a feature is complete or fixed, check `GAPS.md`; some attribute classes exist
-(`NCborConverterAttribute`, `NCborConstructorAttribute`, `NCborDefaultValueAttribute`) but are
-never read by the generator, which does not count as implemented. When you close a gap, update
+stating a feature is complete or fixed, check `GAPS.md`. An attribute class existing does not
+count as implemented — only generator behavior backed by a test does (every attribute is read
+by the generator as of 2026-07-04; see GAP-4–8). When you close a gap, update
 `GAPS.md` and whichever doc made the original claim so they stay in sync.
 
 `NCborSourceGenerationOptionsAttribute.MaxDepth` (previously an unread stub) is now wired up:

@@ -346,6 +346,9 @@ dotnet test NCbor.sln
 
 # Run the demo
 dotnet run --project NCbor.Demo/
+
+# Remove all build output (bin/, obj/, TestResults/); add --dry-run to preview
+scripts/clean.sh
 ```
 
 ## Test Results

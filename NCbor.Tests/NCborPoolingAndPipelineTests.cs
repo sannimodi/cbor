@@ -142,6 +142,65 @@ public class NCborPoolingAndPipelineTests
         perCall.Should().BeLessThan(400);
     }
 
+    private static long AllocatedBySmallSerialize()
+    {
+        var buffer = new ArrayBufferWriter<byte>(4096);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        NCborSerializer.Serialize(buffer, Sample(), Ctx.SimpleModel);
+        return GC.GetAllocatedBytesForCurrentThread() - before;
+    }
+
+    private static void SerializeBytePayload(int size) =>
+        NCborSerializer.Serialize(new ArrayBufferWriter<byte>(size + 1024),
+            new ByteArrayModel { Name = "p", Data = new byte[size] }, Ctx.ByteArrayModel);
+
+    [Fact]
+    public void WriterUnderTheCap_IsRetained_NextSmallCallReusesIt()
+    {
+        SerializeBytePayload(512 * 1024);
+        // Retained writer: the next call allocates no new CborWriter (~1.7 KB).
+        AllocatedBySmallSerialize().Should().BeLessThan(512);
+    }
+
+    [Fact]
+    public void WriterOverTheCap_IsDropped_NextSmallCallAllocatesAFreshOne()
+    {
+        SerializeBytePayload(2 * 1024 * 1024);
+        // The 2 MB writer must not be retained for the thread's lifetime: a fresh writer is created next.
+        AllocatedBySmallSerialize().Should().BeGreaterThan(1024);
+    }
+
+    [Fact]
+    public void ReaderIsResetOnReturn_InputBufferIsCollectable()
+    {
+        static WeakReference DeserializeAndDrop()
+        {
+            byte[] data = NCborSerializer.Serialize(Sample(), Ctx.SimpleModel);
+            NCborSerializer.Deserialize(new ReadOnlyMemory<byte>(data), Ctx.SimpleModel);
+            return new WeakReference(data);
+        }
+
+        WeakReference weak = DeserializeAndDrop();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        weak.IsAlive.Should().BeFalse("the per-thread CborReader must not keep the caller's data alive");
+    }
+
+    [Fact]
+    public async Task PipeWriter_FlushCanceledWhileBackpressured_ThrowsOperationCanceled()
+    {
+        var pipe = new Pipe(new PipeOptions(pauseWriterThreshold: 100, resumeWriterThreshold: 50));
+        var big = new ByteArrayModel { Name = "bp", Data = new byte[1000] };
+
+        Task writing = NCborSerializer.SerializeAsync(pipe.Writer, big, Ctx.ByteArrayModel);
+        writing.IsCompleted.Should().BeFalse("the flush should be waiting on backpressure");
+        pipe.Writer.CancelPendingFlush();
+
+        await writing.Invoking(t => t).Should().ThrowAsync<OperationCanceledException>();
+    }
+
     // ---------- PipeWriter / PipeReader ----------
 
     [Fact]
@@ -217,7 +276,7 @@ public class NCborPoolingAndPipelineTests
     }
 
     [Fact]
-    public async Task PipeWriter_PreCanceledToken_ThrowsAndWritesNothing()
+    public async Task PipeWriter_PreCanceledToken_ThrowsBeforeEncoding_WritesNothing()
     {
         using var cts = new CancellationTokenSource();
         cts.Cancel();

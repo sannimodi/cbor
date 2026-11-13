@@ -76,7 +76,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **Test Coverage**: All policies have dedicated context classes and tests
 
 #### Testing Infrastructure (Phase 2.1) - 100% Complete ✅
-- ✅ **Comprehensive Test Suite**: **499 tests, 0 failures** (336 runtime tests in `NCbor.Tests` + 163 generator tests in `NCbor.Generator.Tests`, a `CSharpGeneratorDriver` harness covering every diagnostic and compile-cleanly checks per model shape)
+- ✅ **Comprehensive Test Suite**: **503 tests, 0 failures** (340 runtime tests in `NCbor.Tests` + 163 generator tests in `NCbor.Generator.Tests`, a `CSharpGeneratorDriver` harness covering every diagnostic and compile-cleanly checks per model shape)
   - ✅ **NCborSerializerTests** (12+ tests): Core serialization functionality
   - ✅ **NCborSerializerErrorTests** (20+ tests): Error handling and edge cases
   - ✅ **NCborExceptionTests** (23+ tests): Custom exception types and integration
@@ -476,7 +476,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - **Type Support**: ✅ **100%** (All critical types complete - DateTime, GUID, primitives, collections, Dictionary, Arrays, Enums)
 - **Attribute System**: ✅ **100%** (all 7 attribute mechanisms implemented, including the context-wide `DefaultIgnoreCondition` default and the `CBOR005` diagnostic for uncovered get-only properties)
 - **Error Handling**: ✅ **100%** (production-ready custom exception types implemented)
-- **Testing**: ✅ **100%** (499 tests covering all implemented features)
+- **Testing**: ✅ **100%** (503 tests covering all implemented features)
 - **Documentation**: ⚠️ **90%** (comprehensive docs, need API reference)
 - **Build System**: ✅ **100%** (all issues resolved, builds successfully)
 - **Naming Policies**: ✅ **100%** (all 7 policies implemented and tested)
@@ -601,7 +601,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 - ✅ **AOT Compatibility**: Zero runtime reflection, fully compatible with Native AOT compilation
 - ✅ **API Design**: Clean, familiar API following System.Text.Json patterns exactly
 - ✅ **Build System**: Resolved complex circular dependency issues with proper project references
-- ✅ **Quality Assurance**: 499 comprehensive tests with 100% pass rate
+- ✅ **Quality Assurance**: 503 comprehensive tests with 100% pass rate
 
 ### Production Readiness Indicators ✅
 - ✅ **Functional Demo**: Working serialization of complex object graphs and collections
@@ -649,7 +649,7 @@ Based on comprehensive analysis from multiple AI models, this library is strateg
 ### **🎯 Success Metrics & KPIs**
 
 **Technical Excellence**:
-- ✅ 499 tests passing (achieved)
+- ✅ 503 tests passing (achieved)
 - ✅ Zero reflection architecture (achieved)
 - 🎯 <5% performance overhead vs hand-written code (target)
 
@@ -697,7 +697,7 @@ Based on comprehensive multi-model analysis, the NCbor Serialization Library has
 
 **🎯 Perfect Market Niche**: Occupying the "System.Text.Json for CBOR" position with clear competitive advantages
 
-**⚡ Technical Excellence**: 99% feature complete with 499 passing tests, zero reflection architecture
+**⚡ Technical Excellence**: 99% feature complete with 503 passing tests, zero reflection architecture
 
 **🚀 Future-Aligned**: Source generation approach follows Microsoft's AOT evolution direction
 

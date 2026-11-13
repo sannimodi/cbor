@@ -92,7 +92,8 @@ public static class NCborSerializer
     /// <remarks>
     /// The payload is encoded synchronously and copied once into the pipe's own buffer — no intermediate array or
     /// stream adapter. <see cref="CborWriter"/> is not incremental, so the whole payload is materialized before the
-    /// flush; backpressure applies at the flush, not chunk-by-chunk.
+    /// flush; backpressure applies at the flush, not chunk-by-chunk. If the flush is canceled, the payload has
+    /// already been committed to the pipe (same as <c>System.Text.Json</c>); only waiting for the reader stops.
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="pipeWriter"/> or <paramref name="typeInfo"/> is null.</exception>
     /// <exception cref="NCborSerializationException">Thrown when serialization fails.</exception>
@@ -300,7 +301,8 @@ public static class NCborSerializer
     /// </summary>
     /// <typeparam name="T">The type of the value to deserialize.</typeparam>
     /// <param name="pipeReader">The pipe to read from (e.g. ASP.NET Core's <c>HttpRequest.BodyReader</c>). It is
-    /// read until the writer completes; the reader itself is not completed.</param>
+    /// read until the writer completes, and everything read is consumed — including on failure, e.g. trailing data
+    /// after the top-level value. The reader itself is not completed.</param>
     /// <param name="typeInfo">The type information for deserialization.</param>
     /// <param name="cancellationToken">A token that may be used to cancel the read.</param>
     /// <returns>A value task whose result is the deserialized value.</returns>
@@ -360,8 +362,8 @@ public static class NCborSerializer
     //   * Don't keep writers whose buffer grew past MaxRetainedWriterBytes, so one large payload doesn't pin
     //     memory for the thread's lifetime.
     //   * Readers are reset to empty on return so the slot never references the caller's data.
-    // Note: unlike the pooled stream buffers (cleared on return), a retained CborWriter's buffer still holds the
-    // previous payload's bytes until it is overwritten; nothing reads them, but they stay in memory.
+    // A retained writer keeps its buffer capacity (up to ~1 MB per thread) but CborWriter.Reset() clears the
+    // contents, so no previous payload bytes linger.
     // ------------------------------------------------------------------
 
     private const int MaxRetainedWriterBytes = 1024 * 1024;
